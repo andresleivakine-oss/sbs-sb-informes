@@ -1,5 +1,5 @@
-SBS / SB · Aplicación local 0.5.21 · Windows
-La versión 0.5.21 unifica la tipografía, las columnas y las etiquetas del semáforo.
+SBS / SB · Aplicación local 0.5.22 · Windows
+La versión 0.5.22 permite abrir un HTML editable desde la aplicación y recuperar sus datos con el diseño actual.
 Si ya tienes la app instalada, pulsa Actualizar aplicación en la pantalla.
 Al actualizar, la configuración anterior de los centros se conserva en este PC.
 
@@ -50,7 +50,7 @@ En Evaluación Funcional y Evaluación Neurológica, agrega una fila por prueba.
 Puedes registrar resultados numéricos o textuales y una observación. La sección
 aparece en el informe cuando una prueba tiene nombre y al menos un resultado
 o una observación. Usa una fila por lado si quieres mostrarlos por separado.
-Guardar HTML conserva el caso y el editor manual local. No hay autoguardado.
+Guardar HTML conserva el caso y el editor manual local. Usa Abrir informe guardado en la app para recuperar los datos con la versión actual. No hay autoguardado.
 Guardar PDF o imprimir: papel Carta (216 × 279 mm), escala 100%, sin encabezados ni pies del navegador.
 Comprueba la vista previa: muchas filas pueden exceder dos páginas.
 Los colores representan metas individuales, no autorización de alta.

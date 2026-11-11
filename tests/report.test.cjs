@@ -83,3 +83,25 @@ vm.runInContext(boundary, context);
 assert.equal(vm.runInContext("chileDayBoundary('2026-11-11',true)", context), '2026-11-12T03:00:00.000Z');
 assert.equal(vm.runInContext("chileDayBoundary('2026-07-11',true)", context), '2026-07-12T04:00:00.000Z');
 console.log('Informe, semáforo, fechas y límites horarios correctos.');
+
+const savedCase = {
+  center: 'SB',
+  patient: 'Paciente de prueba',
+  diagnosis: 'Diagnóstico guardado',
+  clinicalNextStep: 'Control siguiente',
+  rows: [{ group: 'pain', name: 'EVA', initial: 8, current: 2, mode: 'auto' }],
+  brands: { SB: { name: 'Centro guardado', logo: 'https://invalid.example/logo.png' } },
+  localDefaults: { emailByCenter: { SB: 'descartar@example.invalid' } },
+};
+context.savedHtml = '<script id="state" type="application/json">' + JSON.stringify(savedCase) +
+  '</script><script>throw Error("No ejecutar HTML importado")</script>';
+vm.runInContext('data=savedReportState(savedHtml); editors(); report()', context);
+const reopened = nodes.get('report').innerHTML;
+assert.match(reopened, /Paciente de prueba/);
+assert.match(reopened, /Diagnóstico guardado/);
+assert.match(reopened, /8 \/ 10/);
+assert.match(reopened, /Control siguiente/);
+assert.match(reopened, /status-tag green/);
+assert.doesNotMatch(reopened, /invalid\.example|descartar@example/);
+assert.throws(() => vm.runInContext('savedReportState("<html>Otro archivo</html>")', context), /HTML editable/);
+assert.throws(() => vm.runInContext('savedReportState(savedHtml.replace(\'"SB"\', \'"Otro"\'))', context), /formato incompatible/);

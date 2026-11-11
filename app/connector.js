@@ -17,9 +17,13 @@ function syncSource(){
 }
 async function selectPatient(p){
  const same=selectedPatient?.id===p.id&&selectedPatient?.source===p.source;
- if(!same&&(data.rows.length||data.diagnosis||data.suggestions||data.clinicalReason||data.clinicalFindings||data.clinicalNextStep)&&!confirm('Cambiar de paciente vaciará el caso abierto. Guarda antes el informe si necesitas conservarlo. ¿Continuar?')){msg('Se conservó el paciente actual.');return;}
+ const linkedRows=data.rows.filter(row=>row.importKey);
+ const restoredSame=!selectedPatient&&data.patient===p.name&&linkedRows.length>0&&
+  linkedRows.every(row=>String(row.importKey).startsWith(p.source+'|'+p.id+'|'));
+ const keepCase=same||restoredSame;
+ if(!keepCase&&(data.rows.length||data.diagnosis||data.suggestions||data.clinicalReason||data.clinicalFindings||data.clinicalNextStep)&&!confirm('Cambiar de paciente vaciará el caso abierto. Guarda antes el informe si necesitas conservarlo. ¿Continuar?')){msg('Se conservó el paciente actual.');return;}
  selectedPatient=p;requestVersion++;
- if(!same){clearClinical();data.patient=p.name;if(!data.centerPinned)setReportCenter(p.source==='vald'?'SBS':'SB');editors();report();}
+ if(!keepCase){clearClinical();data.patient=p.name;if(!data.centerPinned)setReportCenter(p.source==='vald'?'SBS':'SB');editors();report();}
  $('selectedPatient').textContent=(p.source==='vald'?'VALD':'Kinvent')+' · '+p.name+(p.birth?' · Nac. '+p.birth:'');
  $('apiHistory').hidden=false;syncSource();await startTests();
 }
@@ -282,6 +286,13 @@ function renderTests(){
 for(const id of ['filterKind','filterRegion','filterName'])$(id).oninput=renderTests;
 $('configProvider').onchange=()=>{const v=$('configProvider').value==='vald';$('valdConfigFields').hidden=!v;$('kinventConfigFields').hidden=v;$('configMessage').textContent='';};
 function resetApiViews(){selectedPatient=null;loadedTests=[];seenTests=new Set();$('apiHistory').hidden=true;$('apiPatients').replaceChildren();$('apiTestList').replaceChildren();$('apiMetrics').replaceChildren();}
+document.addEventListener('saved-report-opened',()=>{
+ requestVersion++;
+ resetApiViews();
+ searchPage=0;
+ $('apiQuery').value=data.patient||'';
+ msg('Informe guardado abierto. Puedes buscar el perfil para consultar nuevas evaluaciones.');
+});
 function showConnections(s){
  configuration={vald:!!s.vald,kinvent:!!s.kinvent};
  const label=k=>!s[k]?'sin configurar':s.verified?.[k]?'verificado ahora':s.saved?.[k]?'guardado · se comprobará al consultar':'configurado · sin comprobar en esta sesión';
