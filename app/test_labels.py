@@ -26,7 +26,8 @@ LABELS = {
     'seated': 'Sentado', 'standing': 'De pie', 'supine': 'En decúbito supino',
     'prone': 'En decúbito prono', 'side lying': 'En decúbito lateral',
     'cmj': 'Salto con contramovimiento (CMJ)', 'sj': 'Salto desde sentadilla (SJ)',
-    'dj': 'Salto con caída (DJ)', 'imtp': 'Tirón isométrico de medio muslo (IMTP)',
+    'dj': 'Salto con caída (DJ)', 'slj': 'Salto unipodal (SLJ)',
+    'sldj': 'Salto con caída unipodal (SLDJ)', 'imtp': 'Tirón isométrico de medio muslo (IMTP)',
     'jump height': 'Altura de salto', 'peak force': 'Fuerza máxima',
     'mean force': 'Fuerza media', 'peak power': 'Potencia máxima',
     'mean power': 'Potencia media', 'contact time': 'Tiempo de contacto',
@@ -73,7 +74,7 @@ def classify(title,metadata=None):
  kind='other'
  if any(t in text for t in ['endurance','resistencia']):kind='endurance'
  elif any(t in text for t in ['rangeofmotion','rom ','sens_','movilidad','range_of_motion']):kind='rom'
- elif any(t in text for t in ['jump','cmj','squatjump','dropjump','salto']):kind='jump'
+ elif str(title).strip().lower() in {'cmj','sj','dj','slj','sldj'} or any(t in text for t in ['jump','squatjump','dropjump','salto']):kind='jump'
  elif any(t in text for t in ['balance','stance','equilibrio']):kind='balance'
  elif any(t in text for t in ['strength','meter','force','fuerza','imtp','grip','hamstrings','rotation','flexion','extension','abduction','adduction']):kind='force'
  return {'region':region,'kind':kind,'activityType':'exercise' if types=={'EXERCISE'} else 'evaluation' if types=={'EVALUATION'} else 'unknown'}

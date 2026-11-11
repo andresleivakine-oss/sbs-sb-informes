@@ -1,5 +1,5 @@
 'use strict';
-let apiSession='',selectedPatient=null,searchPage=0,listPage=1,cursor='',seenTests=new Set(),requestVersion=0,configuration={vald:false,kinvent:false},loadedTests=[];
+let apiSession='',selectedPatient=null,searchPage=0,historyPages=new Map(),seenTests=new Set(),requestVersion=0,configuration={vald:false,kinvent:false},loadedTests=[];
 const msg=t=>document.getElementById('apiMessage').textContent=t;
 async function callApi(path,body={}){if(!apiSession){const s=await fetch('/api/session').then(r=>r.json());apiSession=s.session}const r=await fetch('/api/'+path,{method:'POST',headers:{'Content-Type':'application/json','X-Session-Token':apiSession},body:JSON.stringify(body),signal:AbortSignal.timeout(60000)});let d=await r.json();if(!r.ok)throw Error(d.error||'No se pudo consultar');return d}
 async function runApi(fn){try{msg('Consultando…');await fn()}catch(e){msg(e.name==='TimeoutError'?'La consulta tardó más de 60 segundos. Inténtalo de nuevo.':e.message||'No se pudo conectar con el servicio local. Abre INICIAR.bat.')}}
@@ -24,7 +24,7 @@ async function selectPatient(p){
  $('apiHistory').hidden=false;syncSource();await startTests();
 }
 async function startTests(){
- listPage=1;cursor='';seenTests=new Set();loadedTests=[];$('apiTestList').replaceChildren();$('apiMetrics').replaceChildren();$('apiMore').hidden=true;
+ historyPages=new Map();seenTests=new Set();loadedTests=[];$('apiTestList').replaceChildren();$('apiMetrics').replaceChildren();$('apiMore').hidden=true;
  $('apiHistoryNote').textContent='Consultando historial de '+(selectedPatient?.source==='vald'?'VALD':'Kinvent')+'…';
  msg('Cargando evaluaciones…');
  try{await loadTests(false)}catch(e){$('apiHistoryNote').textContent='La consulta de evaluaciones no se completó. '+e.message;throw e;}
@@ -32,8 +32,45 @@ async function startTests(){
 
 $('apiSearch').onclick=()=>{searchPage=0;runApi(findPatients)};$('apiQuery').onkeydown=e=>{if(e.key==='Enter')$('apiSearch').click()};$('apiNext').onclick=()=>{if(source()!=='kinvent')return msg('VALD busca en el listado completo de perfiles.');searchPage++;runApi(findPatients)};$('apiPrev').onclick=()=>{searchPage=Math.max(0,searchPage-1);runApi(findPatients)};
 $('apiSource').onchange=()=>{requestVersion++;selectedPatient=null;searchPage=0;$('apiPatients').replaceChildren();$('apiHistory').hidden=true;$('apiMetrics').replaceChildren();syncSource();msg('Busca un paciente en la fuente elegida. El informe actual se conserva hasta seleccionar otro paciente.')};
-async function loadTests(more=false){if(!selectedPatient)throw Error('Selecciona primero un paciente.');const version=++requestVersion;const d=await callApi('tests',{source:selectedPatient.source,patient:selectedPatient.id,system:selectedPatient.source==='vald'?$('apiSystem').value:undefined,start:$('apiFrom').value,end:$('apiTo').value,page:listPage,cursor:more?cursor:''});if(version!==requestVersion)return;let added=0;for(let t of d.tests||[]){if(seenTests.has(t.key))continue;seenTests.add(t.key);added++;loadedTests.push(t)}renderTests();let stalled=more&&d.cursor&&d.cursor===cursor;cursor=d.cursor||'';$('apiMore').hidden=!d.more||stalled;$('apiHistoryNote').textContent=(d.received!==undefined?'Kinvent: '+d.received+' registros recibidos; '+(d.excluded||0)+' fuera del intervalo. ':'')+(d.note||'')+(stalled?' La paginación no avanzó; no se afirma que el historial esté completo.':'');msg(added?added+' evaluaciones cargadas desde '+(selectedPatient.source==='vald'?'VALD':'Kinvent')+'. Selecciona una para ver los KPI.':d.more?'Sin pruebas nuevas en esta respuesta. Usa Cargar más si está disponible.':(d.received?'Hay registros en Kinvent, pero no coinciden con el intervalo. Amplía las fechas.':'La consulta respondió sin evaluaciones para este perfil. Comprueba el perfil y las fechas.'));}
-$('apiTests').onclick=()=>runApi(startTests);$('apiMore').onclick=()=>{$('apiMetrics').replaceChildren();listPage++;runApi(()=>loadTests(true))};
+async function loadTests(more=false) {
+ if(!selectedPatient)throw Error('Selecciona primero un paciente.');
+ const version=++requestVersion,patient=selectedPatient;
+ const choice=patient.source==='vald'?$('apiSystem').value:'kinvent';
+ const systems=choice==='all'?['dyn','fd']:[choice];
+ const pending=systems.filter(system=>!more||historyPages.get(system)?.more);
+ const replies=await Promise.allSettled(pending.map(system=>{
+  const previous=historyPages.get(system);
+  return callApi('tests',{source:patient.source,patient:patient.id,system,
+   start:$('apiFrom').value,end:$('apiTo').value,page:(previous?.page||0)+1,cursor:previous?.cursor||''});
+ }));
+ if(version!==requestVersion)return;
+ let added=0,failures=[],notes=[];
+ for(const [index,reply] of replies.entries()){
+  const system=pending[index],label={dyn:'DynaMo',fd:'ForceDecks',kinvent:'Kinvent'}[system];
+  if(reply.status==='rejected'){
+   failures.push(label+': '+reply.reason.message);
+   continue;
+  }
+  const d=reply.value,previous=historyPages.get(system);
+  const stalled=more&&d.cursor&&d.cursor===previous?.cursor;
+  historyPages.set(system,{page:(previous?.page||0)+1,cursor:d.cursor||'',more:!!d.more&&!stalled});
+  for(const test of d.tests||[]){
+   if(seenTests.has(test.key))continue;
+   seenTests.add(test.key);
+   loadedTests.push(test);
+   added++;
+  }
+  if(stalled)notes.push(label+': la paginación no avanzó.');
+  if(d.received!==undefined)notes.push('Kinvent: '+d.received+' registros recibidos; '+(d.excluded||0)+' fuera del intervalo.');
+ }
+ renderTests();
+ const hasMore=systems.some(system=>historyPages.get(system)?.more);
+ $('apiMore').hidden=!hasMore;
+ $('apiHistoryNote').textContent=[...notes,...failures,hasMore?'Usa Cargar más para continuar el historial.':''].filter(Boolean).join(' ');
+ msg(added?added+' evaluaciones nuevas cargadas. Selecciona una para ver los KPI.':failures.length?failures.join(' · '):loadedTests.length?'Sin evaluaciones nuevas en esta página.':'No se encontraron evaluaciones en el intervalo indicado.');
+}
+$('apiTests').onclick=()=>runApi(startTests);
+$('apiMore').onclick=()=>{$('apiMetrics').replaceChildren();runApi(()=>loadTests(true))};
 function aggregate(m,how){if(!m.samples)return {...m.values};let vals={};for(const [limb,samples] of Object.entries(m.samples)){let n=samples.filter(x=>typeof x==='number'&&Number.isFinite(x));if(!n.length)continue;let side=limb.toLowerCase().includes('left')?'left':limb.toLowerCase().includes('right')?'right':'value';let v=how==='mean'?n.reduce((a,b)=>a+b,0)/n.length:how==='max'?Math.max(...n):n[+how];if(v===undefined)continue;if(vals[side]!==undefined)throw Error('Varios tipos de lado corresponden a la misma métrica. Selecciona otra métrica o registra manualmente.');vals[side]=v}return vals}
 async function loadMetrics(t){const patientAtRequest=selectedPatient.id,version=++requestVersion;let d=await callApi('metrics',{key:t.key,patient:patientAtRequest});if(!selectedPatient||selectedPatient.id!==patientAtRequest||version!==requestVersion)return;$('apiMetrics').replaceChildren();const comparisons=loadComparisonCandidates(t,patientAtRequest,version);let heading=document.createElement('h3');heading.style.fontSize='14px';heading.textContent=t.title;$('apiMetrics').append(heading);for(let m of d.metrics||[]){let box=document.createElement('div');box.className='roweditor';let title=document.createElement('strong');title.textContent=m.name+' · '+(m.unit||'unidad sin identificar');box.append(title);let info=document.createElement('p');info.className='hint';info.textContent=m.protocol+' · '+m.method;box.append(info);let label=document.createElement('label');label.textContent='Nombre en el informe';let name=document.createElement('input');name.value=m.name;label.append(name);box.append(label);let method=document.createElement('select');if(m.samples){method.innerHTML='<option value="max">Máximo por lado / valor</option><option value="mean">Media por lado / valor</option>';let n=Math.min(...Object.values(m.samples).map(x=>x.length));for(let i=0;i<n;i++){let o=document.createElement('option');o.value=String(i);o.textContent='Registro '+(i+1)+' por lado (revisar orden)';method.append(o)}box.append(method)}else{method.innerHTML='<option value="summary">Resumen del proveedor</option>'}
 let values=document.createElement('p');values.className='hint';const show=()=>{try{let v=aggregate(m,method.value);values.textContent=Object.entries(v).map(([k,x])=>({left:'Izq.',right:'Der.',value:'Único'}[k])+': '+fmt(x)+' '+m.unit).join(' · ')}catch(e){values.textContent=e.message}};method.onchange=show;box.append(values);show();let controls=document.createElement('div');controls.className='rowtools';for(let [slot,label] of [['initial','Cargar inicial'],['control','Cargar control']]){let b=document.createElement('button');b.textContent=label;b.onclick=()=>{try{if(!m.unit)throw Error('La API no identificó la unidad. No se importa por suposición.');let v=aggregate(m,method.value);if(!Object.keys(v).length)throw Error('No hay valores numéricos para importar.');if(importMetric(m,v,slot,name.value,method.value,d,selectedPatient,t))msg('Resultado cargado como '+(slot==='initial'?'inicial':'control')+'. Revisa la fila importada y define su meta.')}catch(e){msg(e.message)}};controls.append(b)}if(m.fingerprint&&m.unit){

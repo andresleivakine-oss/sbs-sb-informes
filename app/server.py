@@ -265,12 +265,14 @@ def dynamo_metrics(t):
  return [{'id':field,'name':spanish_label(name),'unit':unit,'group':group,'values':sides,'method':'Máximo por lado · resúmenes DynaMo','protocol':spanish_label(' · '.join(str(t.get(k) or '') for k in ['position','customPosition']).strip(' ·')),'fingerprint':fingerprint(['DynaMo',protocol,field,unit]),'comparisonProtocol':fingerprint(['DynaMo',core,field,unit]),'attachments':setup,'kpi':'Fuerza máxima en la posición evaluada.' if group=='force' else 'Amplitud de movimiento; conservar signo y posición del protocolo.'}]
 
 def force_metrics(trials,meta):
+ kind=decorate({'title':meta.get('testType') or ''},meta)['kind']
+ group='biomech' if kind in {'jump','balance'} else 'force'
  groups={}
  for tr in trials:
   for r in tr.get('results',[]):
    if not isinstance(r,dict) or not finite(r.get('value')):continue
    definition=r.get('definition') or {};key=str(r.get('resultId'));limb=str(r.get('limb') or tr.get('limb') or 'Trial')
-   item=groups.setdefault(key,{'id':key,'name':spanish_label(definition.get('name') or definition.get('result') or 'KPI '+key),'unit':definition.get('unit') or '', 'samples':{},'group':'force','protocol':spanish_label(meta.get('testType')),'kpi':''})
+   item=groups.setdefault(key,{'id':key,'name':spanish_label(definition.get('name') or definition.get('result') or 'KPI '+key),'unit':definition.get('unit') or '', 'samples':{},'group':group,'protocol':spanish_label(meta.get('testType')),'kpi':''})
    item['samples'].setdefault(limb,[]).append(r['value'])
  config={k:meta.get(k) for k in ['testType','parameter','extendedParameters']}
  for x in groups.values():x['fingerprint']=fingerprint(['ForceDecks',config,x['id'],x['unit']]);x['method']='Seleccionar intento o máximo/media por lado';x['values']={}
@@ -397,7 +399,7 @@ class Handler(SimpleHTTPRequestHandler):
 
 def main():
  global CID,SECRET,KINVENT,TENANT,TOKEN,SAVED,STORAGE_WARNING
- print('SBS / SB · Aplicación local 0.5.10 · Solo lectura.\nConfigura ambos proveedores desde Conexiones en la pantalla.\n')
+ print('SBS / SB · Aplicación local 0.5.11 · Solo lectura.\nConfigura ambos proveedores desde Conexiones en la pantalla.\n')
  if win_secrets.supported():
   try:SAVED=win_secrets.load()
   except Exception:STORAGE_WARNING='No se pudo recuperar la configuración protegida. Vuelve a configurar las conexiones.'
