@@ -1,6 +1,8 @@
 """Aplicación local de lectura VALD y Kinvent. No modifica datos del proveedor."""
 import getpass,json,os,secrets,time,threading,urllib.request,urllib.error,urllib.parse,uuid,webbrowser,unicodedata,hashlib
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from datetime import datetime,timezone
 from http.server import ThreadingHTTPServer,SimpleHTTPRequestHandler
 from vald_common import authenticate,NoRedirect
@@ -102,6 +104,50 @@ def save_identity(d):
   os.replace(tmp,p)
  finally:Path(tmp).unlink(missing_ok=True)
  return {'message':'Identidad guardada.'}
+
+def local_report_defaults():
+ """Keep the legacy defaults on this Windows profile across code updates."""
+ import re
+ path=identity_path().with_name('centros-locales.json')
+ if path.exists():
+  return json.loads(path.read_text(encoding='utf-8'))
+ previous=ROOT.parent/'app-anterior'/'index.html'
+ if not previous.is_file():
+  return {}
+ source=previous.read_text(encoding='utf-8')
+ state=re.search(r'<script id="state" type="application/json">(.*?)</script>',source,re.S)
+ defaults={'brands':json.loads(state[1]).get('brands',{}) if state else {}}
+ for key in ('professionalsByCenter','emailByCenter'):
+  literal=re.search(r'const '+key+r'=\{([^{}]*)\};',source,re.S)
+  if literal:
+   fields={}
+   for center,body in re.findall(r"(SBS|SB)\s*:\s*(\[[^\]]*\]|'[^']*')",literal[1]):
+    strings=re.findall(r"'([^']*)'",body)
+    fields[center]=strings if key=='professionalsByCenter' else strings[0]
+   defaults[key]=fields
+ if not defaults['brands']:
+  return {}
+ fd,tmp=tempfile.mkstemp(dir=path.parent,prefix='centros-',suffix='.tmp')
+ try:
+  with os.fdopen(fd,'w',encoding='utf-8') as f:json.dump(defaults,f,ensure_ascii=False)
+  os.replace(tmp,path)
+ finally:Path(tmp).unlink(missing_ok=True)
+ return defaults
+
+def report_page():
+ import re
+ page=(ROOT/'index.html').read_text(encoding='utf-8')
+ defaults=local_report_defaults()
+ def populate(match):
+  state=json.loads(match[2])
+  for center in state['brands']:
+   state['brands'][center].update(defaults.get('brands',{}).get(center,{}))
+  state['localDefaults']={key:defaults.get(key,{}) for key in ('professionalsByCenter','emailByCenter')}
+  for center in state['brands']:
+   state['localDefaults']['professionalsByCenter'].setdefault(center,[])
+  state['credentials']=defaults.get('emailByCenter',{}).get(state['center'],'')
+  return match[1]+json.dumps(state,ensure_ascii=False).replace('<','\\u003c')+match[3]
+ return re.sub(r'(<script id="state" type="application/json">)(.*?)(</script>)',populate,page,count=1,flags=re.S).encode('utf-8')
 
 def connection_status():
  return {'vald':bool(CID and SECRET),'kinvent':bool(KINVENT),'verified':dict(VERIFIED),'saved':{k:bool(v) for k,v in SAVED.items()},'canRemember':win_secrets.supported(),'storageWarning':STORAGE_WARNING,'region':'use','version':VERSION}
@@ -318,7 +364,10 @@ class Handler(SimpleHTTPRequestHandler):
    try:return self.reply(200,read_identity())
    except UserError as e:return self.reply(400,{'error':str(e)})
   if self.path not in ['/','/index.html','/connector.js']:return self.reply(404,{'error':'No disponible'})
-  self.send_response(200);self.send_header('Content-Type','text/javascript; charset=utf-8' if self.path.endswith('.js') else 'text/html; charset=utf-8');self.send_header('Cache-Control','no-store');self.end_headers();self.wfile.write((ROOT/('connector.js' if self.path.endswith('.js') else 'index.html')).read_bytes())
+  script=self.path.endswith('.js')
+  try:body=(ROOT/'connector.js').read_bytes() if script else report_page()
+  except (OSError,ValueError):return self.reply(500,{'error':'No se pudo leer la configuración local del informe.'})
+  self.send_response(200);self.send_header('Content-Type','text/javascript; charset=utf-8' if script else 'text/html; charset=utf-8');self.send_header('Cache-Control','no-store');self.end_headers();self.wfile.write(body)
  def do_POST(self):
   if not self.hostok() or self.headers.get('X-Session-Token')!=SESSION:return self.reply(403,{'error':'Sesión inválida. Recarga la aplicación.'})
   try:
@@ -346,7 +395,7 @@ class Handler(SimpleHTTPRequestHandler):
 
 def main():
  global CID,SECRET,KINVENT,TENANT,TOKEN,SAVED,STORAGE_WARNING
- print('SBS / SB · Aplicación local 0.5.8 · Solo lectura.\nConfigura ambos proveedores desde Conexiones en la pantalla.\n')
+ print('SBS / SB · Aplicación local 0.5.9 · Solo lectura.\nConfigura ambos proveedores desde Conexiones en la pantalla.\n')
  if win_secrets.supported():
   try:SAVED=win_secrets.load()
   except Exception:STORAGE_WARNING='No se pudo recuperar la configuración protegida. Vuelve a configurar las conexiones.'
@@ -357,6 +406,8 @@ def main():
  try:server=ThreadingHTTPServer(('127.0.0.1',PORT),Handler)
  except OSError:
   print('No se pudo abrir el puerto 8877. Puede haber otra versión abierta. Cierra la consola anterior y vuelve a iniciar.');return
+ try:local_report_defaults()
+ except (OSError,ValueError):print('No se pudo recuperar la configuración local de los centros.')
  print(f'Abre http://127.0.0.1:{PORT}. Mantén esta consola abierta. Ctrl+C para cerrar.')
  webbrowser.open(f'http://127.0.0.1:{PORT}')
  try:server.serve_forever()

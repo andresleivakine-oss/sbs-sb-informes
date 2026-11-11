@@ -20,7 +20,7 @@ def validate_zip(path):
  if set(out)!=set(FILES):raise ValueError('Faltan archivos de la aplicación. Usa el paquete completo.')
  return out
 
-VERSION='0.5.8'
+VERSION='0.5.9'
 UPDATE_ROOT='https://raw.githubusercontent.com/andresleivakine-oss/sbs-sb-informes/main/'
 
 def version_tuple(value):
@@ -93,8 +93,11 @@ def install_payload(payload):
    raise
  finally:
   if stage.exists():shutil.rmtree(stage)
- launcher='@echo off\nchcp 65001 >nul\ncd /d "'+str(target)+'"\npy -3 server.py\nif errorlevel 1 pause\n'
- updater='@echo off\nchcp 65001 >nul\npy -3 "'+str(target/'install_local.py')+'" --update\npause\n'
+ runtime = base/'python'/'python.exe'
+ command = '"%LOCALAPPDATA%\\SBS_SB\\python\\python.exe"' if runtime.is_file() else 'py -3'
+ app = r'%LOCALAPPDATA%\SBS_SB\app'
+ launcher = f'@echo off\nchcp 65001 >nul\ncd /d "{app}"\n{command} server.py\nif errorlevel 1 pause\n'
+ updater = f'@echo off\nchcp 65001 >nul\n{command} "{app}\\install_local.py" --update\npause\n'
  (base/'Abrir SBS SB.cmd').write_text(launcher,encoding='utf-8');(base/'Actualizar SBS SB.cmd').write_text(updater,encoding='utf-8')
  # Accesos en el menú Inicio; no presupone la ubicación del escritorio/OneDrive.
  menu=Path(os.environ['APPDATA'])/'Microsoft'/'Windows'/'Start Menu'/'Programs'/'SBS SB';menu.mkdir(parents=True,exist_ok=True)
@@ -119,8 +122,12 @@ def main():
   if running():raise RuntimeError('La aplicación no se cerró. Puedes seguir usando la versión anterior.')
   install_payload(payload);return
  if '--update' in sys.argv:
-  from tkinter import Tk,filedialog
-  root=Tk();root.withdraw();chosen=filedialog.askopenfilename(title='Selecciona un ZIP SBS / SB confiable (actualización manual de respaldo)',filetypes=[('Paquete SBS / SB','*.zip')]);root.destroy()
+  try:
+   from tkinter import Tk,filedialog
+  except ImportError:
+   chosen=input('Pega la ruta del ZIP de actualizacion SBS / SB: ').strip().strip('"')
+  else:
+   root=Tk();root.withdraw();chosen=filedialog.askopenfilename(title='Selecciona un ZIP SBS / SB confiable (actualización manual de respaldo)',filetypes=[('Paquete SBS / SB','*.zip')]);root.destroy()
   if not chosen:return
   if input('Escribe ACTUALIZAR para instalar el paquete seleccionado: ').strip()!='ACTUALIZAR':return
   payload=validate_zip(chosen)
@@ -129,6 +136,18 @@ def main():
  if running():
   print('Cierra la consola anterior con Ctrl+C antes de instalar.')
   input('Cuando esté cerrada, presiona Enter: ')
+ if '--update' not in sys.argv and (src/'python'/'python.exe').is_file():
+  if running():raise RuntimeError('Cierra primero la aplicación abierta.')
+  base=Path(os.environ['LOCALAPPDATA'])/'SBS_SB'
+  runtime=base/'python'
+  if not (runtime/'python.exe').is_file():
+   base.mkdir(parents=True,exist_ok=True)
+   stage=Path(tempfile.mkdtemp(prefix='python-next-',dir=base))
+   try:
+    shutil.copytree(src/'python',stage/'python')
+    (stage/'python').rename(runtime)
+   finally:
+    shutil.rmtree(stage)
  install_payload(payload)
 if __name__=='__main__':
  try:main()
