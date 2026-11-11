@@ -22,6 +22,11 @@ vm.runInContext(`
   data.clinicalReason = 'Motivo anterior';
   data.clinicalFindings = 'Hallazgo simulado';
   data.rows = [
+    {name:'KOOS', group:'q', protocol:'Subescala de síntomas', initial:50, current:70},
+    {name:'KOOS', group:'q', protocol:'Subescala de dolor', initial:40, current:65},
+    {name:'GROC', group:'q', current:4},
+    {name:'Evaluación Kinvent', group:'force', format:'single', equipment:'Kinvent', protocol:'Protocolo editable', initial:20},
+    {name:'Evaluación VALD', group:'force', format:'single', protocol:'VALD ForceDecks · máximo', initial:20},
     {name:'Fuerza inicial', group:'force', format:'bilateral', mode:'auto', unit:'N', li:100, ri:90, initialDate:'11-11-2026'},
     {name:'Fuerza con control', group:'force', format:'bilateral', mode:'auto', unit:'N', li:100, ri:70, lc:100, rc:95, initialDate:'11-11-2026', controlDate:'20-11-2026'},
     {name:'Salto igual', group:'biomech', format:'single', mode:'auto', unit:'cm', initial:30, current:30},
@@ -35,6 +40,14 @@ vm.runInContext(`
 `, context);
 const report = nodes.get('report').innerHTML;
 assert.match(report, /Hallazgo simulado/);
+assert.match(report, /Evaluado con equipos VALD y Kinvent/);
+assert.match(report, /KOOS · Subescala de síntomas/);
+assert.doesNotMatch(report, /VALD ForceDecks · máximo|Protocolo editable/);
+assert.equal([...report.matchAll(/Dolor, síntomas, función y calidad de vida relacionados con la rodilla/g)].length, 1);
+assert.match(report, /Cambio global percibido por el paciente desde el inicio/);
+assert.doesNotMatch(report, /Tamizaje de siete patrones/);
+assert.equal(vm.runInContext("reportNotes([{group:'force', protocol:'Medición manual'}])", context), '');
+assert.match(vm.runInContext("reportNotes([{group:'force', equipment:'Kinvent'}])", context), /equipos Kinvent\./);
 assert.equal([...report.matchAll(/No es necesario reevaluar la asimetría/g)].length, 1);
 assert.match(report, /11-11-2026/);
 assert.match(report, /20-11-2026/);

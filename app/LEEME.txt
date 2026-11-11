@@ -1,5 +1,5 @@
-SBS / SB · Aplicación local 0.5.17 · Windows
-La versión 0.5.17 incorpora un resumen clínico y fechas por prueba.
+SBS / SB · Aplicación local 0.5.18 · Windows
+La versión 0.5.18 agrupa al pie los equipos utilizados y las explicaciones de los cuestionarios.
 Si ya tienes la app instalada, pulsa Actualizar aplicación en la pantalla.
 Al actualizar, la configuración anterior de los centros se conserva en este PC.
 

@@ -160,9 +160,10 @@ function metricRow(metric,values,method,patient,test,label) {
  const existing=key?data.rows.find(row=>row.importKey===key):null;
  if(existing)return metric.group==='biomech'?{...existing,name:label,unit:metric.unit,direction:metric.direction||'review'}:{...existing};
  const provider=patient.source==='kinvent'?'Kinvent':test.source==='fd'?'VALD ForceDecks':'VALD DynaMo';
+ const equipment=patient.source==='kinvent'?'Kinvent':'VALD';
  const aggregation=method==='max'?'máximo':method==='mean'?'media':metric.method;
  return {group:metric.group||'force',format:single?'single':'sides',name:label,unit:metric.unit,
-  protocol:[provider,metric.group==='biomech'?'':metric.protocol,aggregation].filter(Boolean).join(' · '),initial:'',current:'',
+  equipment,protocol:[provider,metric.group==='biomech'?'':metric.protocol,aggregation].filter(Boolean).join(' · '),initial:'',current:'',
   li:'',ri:'',lc:'',rc:'',metric:single?'current':data.side==='left'?'lc':'rc',op:'>=',goal:'',
   mode:'auto',direction:metric.direction||'review',importKey:key,origin:'',reviewed:false,kpi:metric.kpi||''};
 }
