@@ -1,0 +1,125 @@
+SBS / SB · Aplicación local 0.5.0 · Windows
+
+INSTALACIÓN INICIAL
+1. Cierra la versión anterior (Ctrl+C en su consola).
+2. Extrae el ZIP completo una vez y abre INSTALAR.bat.
+3. Busca "Abrir SBS SB" en el menú Inicio de Windows.
+Requiere Python 3.10 o posterior, con el comando py (ya usado en el prototipo).
+También puedes usar INICIAR.bat para probar sin instalar.
+La consola debe mantenerse abierta mientras trabajas. Aún no es un EXE autónomo.
+
+CONEXIONES (YA NO SE PIDEN EN LA CONSOLA)
+En la pantalla abre Conexiones. Configura VALD con clientID, TEAM ID y
+clientSecret. Pulsa Comprobar y conectar. Después elige Kinvent, introduce su
+clave y vuelve a comprobar. No debes reiniciar para usar un proveedor u otro.
+VALD verifica autenticación y lectura de perfiles; Kinvent comprueba búsqueda de perfiles, la misma operación utilizada al buscar pacientes.
+Cada permiso de historial o métrica se comprueba al consultar esa operación.
+
+Marca Recordar en Windows si quieres conservar cada conexión al cerrar.
+El archivo conexiones.dpapi se cifra con DPAPI para tu usuario Windows.
+No se guarda texto claro ni se incluyen claves en los informes HTML.
+Los demás usuarios de Windows/computadores deben configurar sus conexiones.
+DPAPI no impide el acceso a un programa que se ejecute con tu mismo usuario.
+Eliminar conexión borra esa fuente del guardado protegido y de la sesión.
+Si no marcas Recordar, dura solo durante la sesión.
+El módulo DPAPI debe comprobarse en Windows: este paquete se probó en Linux
+con simulación del guardado, sin afirmar una prueba real de cifrado Windows.
+
+BUSCAR Y ACTUALIZAR EVALUACIONES
+Elige la fuente, escribe nombre o apellido y selecciona al paciente.
+Su historial se consulta automáticamente. Actualizar evaluaciones vuelve a
+consultar esa fuente para ese paciente y las fechas indicadas, sin reiniciar.
+El intervalo inicial es el último año; amplíalo para pruebas antiguas.
+Usa los filtros por tipo, región y nombre. La clasificación se basa en las
+etiquetas del proveedor; revisa Otros si una prueba no está clasificada.
+Las recientes aparecen primero. Cargar más completa las páginas de VALD;
+una primera respuesta no garantiza un historial completo.
+En Kinvent, Perfil deportista cambia el tipo de perfil buscado.
+
+INFORME
+Carga cada KPI como inicial o control. Verifica prueba, lado, unidad, método y
+fechas. Define una meta clínica o valoración manual y marca la revisión.
+Completa cuestionarios, ROM, sugerencias y firma/identificación del profesional.
+Guardar HTML conserva el caso y el editor manual local. No hay autoguardado.
+Imprimir / PDF: A4, escala 100%, sin encabezados/pies del navegador.
+Comprueba la vista previa: muchas filas pueden exceder dos páginas.
+Los colores representan metas individuales, no autorización de alta.
+
+ACTUALIZACIONES DEL PROGRAMA
+En el menú Inicio usa "Actualizar SBS SB". Selecciona el ZIP completo de una
+nueva versión recibido desde una fuente confiable; no necesitas extraerlo.
+Escribe ACTUALIZAR y, cuando lo pida, cierra la consola de la aplicación.
+El actualizador reemplaza el código y conserva conexiones.dpapi fuera de app.
+La versión anterior del código se mantiene en app-anterior hasta actualizar
+otra vez. Los informes deben guardarse fuera de la carpeta app.
+Aún debes descargar el paquete: NO hay publicación ni descarga automática
+configurada. El ZIP contiene código ejecutable; usa solo paquetes confiables.
+
+ESTADO Y LÍMITES
+Kinvent: búsqueda de perfiles e historial observados en la cuenta real del
+usuario. Valores y unidades de fuerza/ROM aún deben contrastarse con un test
+conocido. Saltos, equilibrio y EMG se listan pero aún no se importan aquí.
+VALD: acceso previo comprobado por el usuario a perfiles, ForceDecks y DynaMo.
+El nuevo flujo de configuración debe validarse con sus credenciales reales.
+No se convierten unidades ni se emparejan proveedores como equivalentes.
+No hay usuarios propios de la aplicación ni sincronización entre computadores.
+Cada profesional guarda sus casos localmente; se usan los permisos de la API.
+No se han probado en Windows el instalador, sus accesos o DPAPI desde aquí.
+Las pruebas de conectores utilizan respuestas simuladas, no claves reales.
+
+CORRECCIÓN 0.4.1
+La comprobación Kinvent usa la búsqueda de perfiles que ya respondió en la
+cuenta del usuario, en lugar de authorization/self. Un HTTP 401 sigue pudiendo
+indicar clave inválida/caducada/revocada o permiso denegado; no se omite el error.
+La comprobación realiza una búsqueda de prueba sin conservar datos personales.
+
+CORRECCIÓN 0.4.2
+- Diferencia bilateral visible en inicial y control, calculada por separado.
+- Bloquea cargar la misma evaluación en ambas columnas como evolución.
+- Casos previos duplicados quedan señalados y no se emiten hasta corregirlos.
+- Kinvent abre el JSON de cada actividad dentro de la lista activitiesResults.
+- Admite campos de resultado con y sin prefijo _, y repResults de la API.
+- Usa el dispositivo informado en resultados o configuración para identificar
+  unidades. Si no puede verificarlas, no importa por suposición.
+- Mantiene compatibilidad con el formato anterior y no convierte kgf a N.
+Este cambio se probó con respuestas representativas simuladas; aún debe
+contrastarse con los valores de una prueba real de la cuenta del usuario.
+
+REGLA DE TRABAJO 0.4.3 · FUERZA BILATERAL
+Asimetría <15% = verde / Logrado; 15 a 20% inclusive = amarillo / En progreso;
+>20% = rojo / No logrado. La observación corresponde al control. Las asimetrías
+de inicial y control se muestran y colorean separadamente. Esta regla fue
+indicada por el responsable del centro, no se presenta como umbral universal.
+La fórmula es |Izq - Der| / mayor de ambos *100. Sin datos válidos no se asigna
+cumplimiento. Las filas API requieren revisión antes de emitir el informe.
+Cuestionarios: inicial y control; GROC solamente final, con inicial deshabilitado.
+
+CAMBIOS 0.4.4 / 0.4.5
+Selector de centro también dentro de Identidad, sincronizado con el superior.
+Al elegir centro manualmente, cambiar de fuente API no cambia esa identidad.
+WhatsApp y teléfono editables e independientes para cada centro. WhatsApp
+clicable y visible en encabezado y pie del informe; teléfono adicional si difiere.
+Números precargados según sitios oficiales: SBS +56 9 5855 0953 (WhatsApp/Tel.);
+SB WhatsApp +56 9 5357 0260, teléfono +56 51 248 0115.
+Guardar identidad de ambos centros conserva datos y logos localmente fuera
+de la carpeta del código, por lo que no se borran al actualizar.
+La numeración del informe empieza en 01 y avanza solo por apartados presentes:
+cuestionarios, ROM, fuerza, sugerencias si hay texto y firma profesional al final.
+No deja saltos por apartados omitidos.
+
+ACTUALIZACIÓN POR INTERNET · 0.5.0
+Actualiza una vez desde el paquete completo usando el actualizador manual del
+menú Inicio. Después tendrás el botón Actualizar aplicación dentro de la pantalla.
+Al abrir, comprueba si existe una versión nueva en el repositorio:
+https://github.com/andresleivakine-oss/sbs-sb-informes
+El botón consulta la versión, solicita confirmar que guardaste el informe,
+descarga, comprueba SHA-256, valida archivos y versión, y reinicia la aplicación.
+Conserva conexiones.dpapi e identidad.json fuera de la carpeta app.
+Si falla la consulta o la verificación, continúa disponible la versión instalada.
+La sustitución de archivos conserva el código anterior para recuperar un fallo.
+La comprobación de integridad no sustituye proteger la cuenta de GitHub:
+quien pueda publicar en ese repositorio controla el código de futuras versiones.
+GitHub solo recibe peticiones de descarga (no claves ni informes).
+Las versiones se distribuyen mediante updates/latest.json y paquetes ZIP dentro del repositorio. No requiere cuenta GitHub en cada computador.
+La instalación/reapertura automática en Windows todavía debe comprobarse en
+un computador Windows; aquí se probaron validaciones y flujo con simulaciones.

@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+*.dpapi
+.env
+.env.*
+identidad.json
+informe*.html
+Informe*.html
+*.pdf
+*.csv
+*.xlsx
+*.rar
+update-pending/
+app-anterior/
