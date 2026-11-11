@@ -36,11 +36,111 @@ async function loadTests(more=false){if(!selectedPatient)throw Error('Selecciona
 $('apiTests').onclick=()=>runApi(startTests);$('apiMore').onclick=()=>{listPage++;runApi(()=>loadTests(true))};
 function aggregate(m,how){if(!m.samples)return {...m.values};let vals={};for(const [limb,samples] of Object.entries(m.samples)){let n=samples.filter(x=>typeof x==='number'&&Number.isFinite(x));if(!n.length)continue;let side=limb.toLowerCase().includes('left')?'left':limb.toLowerCase().includes('right')?'right':'value';let v=how==='mean'?n.reduce((a,b)=>a+b,0)/n.length:how==='max'?Math.max(...n):n[+how];if(v===undefined)continue;if(vals[side]!==undefined)throw Error('Varios tipos de lado corresponden a la misma métrica. Selecciona otra métrica o registra manualmente.');vals[side]=v}return vals}
 async function loadMetrics(t){const patientAtRequest=selectedPatient.id,version=++requestVersion;let d=await callApi('metrics',{key:t.key,patient:patientAtRequest});if(!selectedPatient||selectedPatient.id!==patientAtRequest||version!==requestVersion)return;$('apiMetrics').replaceChildren();let heading=document.createElement('h3');heading.style.fontSize='14px';heading.textContent=t.title;$('apiMetrics').append(heading);for(let m of d.metrics||[]){let box=document.createElement('div');box.className='roweditor';let title=document.createElement('strong');title.textContent=m.name+' · '+(m.unit||'unidad sin identificar');box.append(title);let info=document.createElement('p');info.className='hint';info.textContent=m.protocol+' · '+m.method;box.append(info);let label=document.createElement('label');label.textContent='Nombre en el informe';let name=document.createElement('input');name.value=m.name;label.append(name);box.append(label);let method=document.createElement('select');if(m.samples){method.innerHTML='<option value="max">Máximo por lado / valor</option><option value="mean">Media por lado / valor</option>';let n=Math.min(...Object.values(m.samples).map(x=>x.length));for(let i=0;i<n;i++){let o=document.createElement('option');o.value=String(i);o.textContent='Registro '+(i+1)+' por lado (revisar orden)';method.append(o)}box.append(method)}else{method.innerHTML='<option value="summary">Resumen del proveedor</option>'}
-let values=document.createElement('p');values.className='hint';const show=()=>{try{let v=aggregate(m,method.value);values.textContent=Object.entries(v).map(([k,x])=>({left:'Izq.',right:'Der.',value:'Único'}[k])+': '+fmt(x)+' '+m.unit).join(' · ')}catch(e){values.textContent=e.message}};method.onchange=show;box.append(values);show();let controls=document.createElement('div');controls.className='rowtools';for(let [slot,label] of [['initial','Cargar inicial'],['control','Cargar control']]){let b=document.createElement('button');b.textContent=label;b.onclick=()=>{try{if(!m.unit)throw Error('La API no identificó la unidad. No se importa por suposición.');let v=aggregate(m,method.value);if(!Object.keys(v).length)throw Error('No hay valores numéricos para importar.');importMetric(m,v,slot,name.value,method.value,d,selectedPatient,t);msg('Resultado cargado como '+(slot==='initial'?'inicial':'control')+'. Revisa la fila importada y define su meta.')}catch(e){msg(e.message)}};controls.append(b)}box.append(controls);$('apiMetrics').append(box)}msg(d.note||'Revisa las métricas antes de cargar.')}
-function importMetric(m,v,slot,label,method,response,patient,test){let date=response.date?new Date(response.date):null;let dateString=date&&!isNaN(date)?date.toLocaleDateString('es-CL',{timeZone:'America/Santiago'}):prompt('Confirma la fecha de esta evaluación (dd/mm/aaaa):');if(!dateString)throw Error('No se importó: falta fecha.');if(v.value!==undefined&&(v.left!==undefined||v.right!==undefined))throw Error('La métrica mezcla resultados globales y por lado. Usa el ingreso manual para elegir el dato correcto.');const single=v.value!==undefined&&v.left===undefined&&v.right===undefined;let key=m.fingerprint?[patient.source,patient.id,m.fingerprint,method,single?'single':'sides'].join('|'):null;let r=key?data.rows.find(x=>x.importKey===key):null;if(r&&r[slot==='initial'?'controlTest':'initialTest']===response.test)throw Error('Esta misma evaluación ya está cargada en la otra columna. Elige una evaluación distinta para comparar evolución.');if(!r){r={group:m.group||'force',format:single?'single':'sides',name:label,unit:m.unit,protocol:(patient.source==='vald'?(test.source==='fd'?'VALD ForceDecks':'VALD DynaMo'):'Kinvent')+' · '+m.protocol+' · '+(method==='max'?'máximo':method==='mean'?'media':m.method),initial:'',current:'',li:'',ri:'',lc:'',rc:'',metric:single?'current':data.side==='left'?'lc':'rc',op:'>=',goal:'',mode:'auto',direction:'review',importKey:key,origin:'',reviewed:false,kpi:m.kpi||''};data.rows.push(r)}
-const keys=slot==='initial'?['li','ri','initial']:['lc','rc','current'];if(keys.some(k=>number(r[k])!==null)&&!confirm('Ya hay datos en esta columna para el mismo KPI y protocolo. ¿Reemplazarlos?'))return;
-for(const k of keys)r[k]='';
-if(v.left!==undefined)r[keys[0]]=v.left;if(v.right!==undefined)r[keys[1]]=v.right;if(v.value!==undefined)r[keys[2]]=v.value;r[slot==='initial'?'initialDate':'controlDate']=dateString;r[slot==='initial'?'initialTest':'controlTest']=response.test;r.origin='Paciente '+patient.name+' · Inicial: '+(r.initialTest||'sin cargar')+' · Control: '+(r.controlTest||'sin cargar');r.reviewed=false;if(slot==='initial')data.initialDate=dateString;else data.controlDate=dateString;editors();report();}
+let values=document.createElement('p');values.className='hint';const show=()=>{try{let v=aggregate(m,method.value);values.textContent=Object.entries(v).map(([k,x])=>({left:'Izq.',right:'Der.',value:'Único'}[k])+': '+fmt(x)+' '+m.unit).join(' · ')}catch(e){values.textContent=e.message}};method.onchange=show;box.append(values);show();let controls=document.createElement('div');controls.className='rowtools';for(let [slot,label] of [['initial','Cargar inicial'],['control','Cargar control']]){let b=document.createElement('button');b.textContent=label;b.onclick=()=>{try{if(!m.unit)throw Error('La API no identificó la unidad. No se importa por suposición.');let v=aggregate(m,method.value);if(!Object.keys(v).length)throw Error('No hay valores numéricos para importar.');if(importMetric(m,v,slot,name.value,method.value,d,selectedPatient,t))msg('Resultado cargado como '+(slot==='initial'?'inicial':'control')+'. Revisa la fila importada y define su meta.')}catch(e){msg(e.message)}};controls.append(b)}if(m.fingerprint&&m.unit){
+ const hint=document.createElement('p');
+ hint.className='hint';
+ hint.textContent='Compara dentro de las evaluaciones cargadas para esta prueba. Amplía las fechas o pulsa Cargar más para incluir otras mediciones.';
+ box.append(hint);
+ for(const [mode,caption] of [['firstLast','Inicial y final'],['latest','Dos últimas']]){
+  const button=document.createElement('button');
+  button.textContent=caption;
+  button.onclick=()=>runApi(()=>compareMetric(m,method.value,name.value,t,d,mode,button));
+  controls.append(button);
+ }
+}
+box.append(controls);$('apiMetrics').append(box)}msg(d.note||'Revisa las métricas antes de cargar.')}
+function metricShape(values) {
+ const sides=Object.keys(values).filter(key=>typeof values[key]==='number'&&Number.isFinite(values[key])).sort();
+ if(!sides.length||sides.includes('value')&&sides.length>1)throw Error('La métrica necesita valores numéricos con una lateralidad consistente.');
+ return sides.join(',');
+}
+function metricRow(metric,values,method,patient,test,label) {
+ const single=metricShape(values)==='value';
+ const key=metric.fingerprint?[patient.source,patient.id,metric.fingerprint,method,single?'single':'sides'].join('|'):null;
+ const existing=key?data.rows.find(row=>row.importKey===key):null;
+ if(existing)return {...existing};
+ const provider=patient.source==='kinvent'?'Kinvent':test.source==='fd'?'VALD ForceDecks':'VALD DynaMo';
+ const aggregation=method==='max'?'máximo':method==='mean'?'media':metric.method;
+ return {group:metric.group||'force',format:single?'single':'sides',name:label,unit:metric.unit,
+  protocol:[provider,metric.protocol,aggregation].filter(Boolean).join(' · '),initial:'',current:'',
+  li:'',ri:'',lc:'',rc:'',metric:single?'current':data.side==='left'?'lc':'rc',op:'>=',goal:'',
+  mode:'auto',direction:'review',importKey:key,origin:'',reviewed:false,kpi:metric.kpi||''};
+}
+function writeMetricSlot(row,slot,values,response,date) {
+ const initial=slot==='initial';
+ row[initial?'li':'lc']=values.left??'';
+ row[initial?'ri':'rc']=values.right??'';
+ row[initial?'initial':'current']=values.value??'';
+ row[initial?'initialDate':'controlDate']=date;
+ row[initial?'initialTest':'controlTest']=response.test;
+}
+function saveMetricRow(row,patient) {
+ row.origin='Paciente '+patient.name+' · Inicial: '+(row.initialTest||'sin cargar')+' · Control: '+(row.controlTest||'sin cargar');
+ row.reviewed=false;
+ const index=row.importKey?data.rows.findIndex(x=>x.importKey===row.importKey):-1;
+ if(index<0)data.rows.push(row);else data.rows[index]=row;
+ if(row.initialDate)data.initialDate=row.initialDate;
+ if(row.controlDate)data.controlDate=row.controlDate;
+ editors();
+ report();
+}
+function evaluationDate(date) {
+ const parsed=new Date(date);
+ return date&&!isNaN(parsed)?parsed.toLocaleDateString('es-CL',{timeZone:'America/Santiago'}):'';
+}
+function importMetric(metric,values,slot,label,method,response,patient,test) {
+ const date=evaluationDate(response.date)||prompt('Confirma la fecha de esta evaluación (dd/mm/aaaa):');
+ if(!date)throw Error('Falta la fecha de la evaluación.');
+ const row=metricRow(metric,values,method,patient,test,label);
+ const initial=slot==='initial';
+ if(row[initial?'controlTest':'initialTest']===response.test)throw Error('Elige otra evaluación para la segunda columna.');
+ const keys=initial?['li','ri','initial']:['lc','rc','current'];
+ if(keys.some(key=>number(row[key])!==null)&&!confirm('Esta columna ya tiene datos. ¿Reemplazarlos?'))return false;
+ writeMetricSlot(row,slot,values,response,date);
+ row.comparisonMode='';
+ saveMetricRow(row,patient);
+ return true;
+}
+function selectComparison(records,mode) {
+ const dated=records.filter(record=>evaluationDate(record.response.date));
+ const unique=[...new Map(dated.map(record=>[record.response.test,record])).values()];
+ unique.sort((a,b)=>Date.parse(a.response.date)-Date.parse(b.response.date));
+ if(unique.length<2)throw Error('Se necesitan dos evaluaciones fechadas de esta métrica, con el mismo protocolo, unidad y lateralidad.');
+ return [unique[mode==='latest'?unique.length-2:0],unique[unique.length-1]];
+}
+async function compareMetric(metric,method,label,test,response,mode,button) {
+ const patient=selectedPatient;
+ const version=requestVersion;
+ if(!patient||!metric.unit||!metric.fingerprint)throw Error('Usa la selección manual para esta métrica.');
+ const values=aggregate(metric,method);
+ const shape=metricShape(values);
+ const records=[{values,response,test}];
+ const candidates=loadedTests.filter(other=>other.key!==test.key&&other.source===test.source&&other.title===test.title);
+ button.disabled=true;
+ try{
+  for(const [index,other] of candidates.entries()){
+   msg('Revisando evaluaciones compatibles ('+(index+1)+' de '+candidates.length+')…');
+   const result=await callApi('metrics',{key:other.key,patient:patient.id});
+   if(selectedPatient!==patient||requestVersion!==version)return;
+   const match=result.metrics?.find(item=>item.fingerprint===metric.fingerprint&&item.unit===metric.unit&&item.group===metric.group);
+   if(!match)continue;
+   const otherValues=aggregate(match,method);
+   try{if(metricShape(otherValues)===shape)records.push({values:otherValues,response:result,test:other});}
+   catch(error){continue;}
+  }
+  const [first,last]=selectComparison(records,mode);
+  const firstDate=evaluationDate(first.response.date);
+  const lastDate=evaluationDate(last.response.date);
+  const pairLabel=mode==='latest'?'Dos últimas':'Inicial y final';
+  const row=metricRow(metric,values,method,patient,test,label);
+  if(!confirm(pairLabel+' entre las evaluaciones cargadas: '+firstDate+' → '+lastDate+'. ¿Cargar estas dos fechas en el informe?'))return;
+  writeMetricSlot(row,'initial',first.values,first.response,firstDate);
+  writeMetricSlot(row,'control',last.values,last.response,lastDate);
+  row.comparisonMode=pairLabel;
+  saveMetricRow(row,patient);
+  msg(pairLabel+': '+firstDate+' → '+lastDate+'. Revisa la fila importada.');
+ }finally{button.disabled=false;}
+}
 // El HTML descargado conserva datos e identidad, sin secretos ni conexión obligatoria.
 const baseSave=$('save').onclick;$('save').onclick=()=>{baseSave()};
 $('apiSystem').onchange=()=>{if(selectedPatient?.source==='vald')runApi(startTests)};
