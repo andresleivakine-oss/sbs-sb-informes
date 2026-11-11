@@ -6,7 +6,7 @@ from http.server import ThreadingHTTPServer,SimpleHTTPRequestHandler
 from vald_common import authenticate,NoRedirect
 import tempfile,base64
 import win_secrets
-from test_labels import friendly,decorate
+from test_labels import friendly,decorate,spanish_label
 from install_local import VERSION,check_online_update,stage_online_update
 ROOT=Path(__file__).resolve().parent
 PORT=8877
@@ -214,7 +214,7 @@ def dynamo_metrics(t):
  if not sides:return []
  protocol={k:t.get(k) for k in ['testCategory','bodyRegion','movement','position','customPosition','attachments','leftAttachment','rightAttachment']}
  name=' · '.join(str(t.get(k) or '') for k in ['bodyRegion','movement']).strip(' ·')
- return [{'id':field,'name':name,'unit':unit,'group':group,'values':sides,'method':'Máximo por lado · resúmenes DynaMo','protocol':' · '.join(str(t.get(k) or '') for k in ['position','customPosition']).strip(' ·'),'fingerprint':fingerprint(['DynaMo',protocol,field,unit]),'kpi':'Fuerza máxima en la posición evaluada.' if group=='force' else 'Amplitud de movimiento; conservar signo y posición del protocolo.'}]
+ return [{'id':field,'name':spanish_label(name),'unit':unit,'group':group,'values':sides,'method':'Máximo por lado · resúmenes DynaMo','protocol':spanish_label(' · '.join(str(t.get(k) or '') for k in ['position','customPosition']).strip(' ·')),'fingerprint':fingerprint(['DynaMo',protocol,field,unit]),'kpi':'Fuerza máxima en la posición evaluada.' if group=='force' else 'Amplitud de movimiento; conservar signo y posición del protocolo.'}]
 
 def force_metrics(trials,meta):
  groups={}
@@ -222,7 +222,7 @@ def force_metrics(trials,meta):
   for r in tr.get('results',[]):
    if not isinstance(r,dict) or not finite(r.get('value')):continue
    definition=r.get('definition') or {};key=str(r.get('resultId'));limb=str(r.get('limb') or tr.get('limb') or 'Trial')
-   item=groups.setdefault(key,{'id':key,'name':definition.get('name') or definition.get('result') or 'KPI '+key,'unit':definition.get('unit') or '', 'samples':{},'group':'force','protocol':str(meta.get('testType') or ''),'kpi':''})
+   item=groups.setdefault(key,{'id':key,'name':spanish_label(definition.get('name') or definition.get('result') or 'KPI '+key),'unit':definition.get('unit') or '', 'samples':{},'group':'force','protocol':spanish_label(meta.get('testType')),'kpi':''})
    item['samples'].setdefault(limb,[]).append(r['value'])
  config={k:meta.get(k) for k in ['testType','parameter','extendedParameters']}
  for x in groups.values():x['fingerprint']=fingerprint(['ForceDecks',config,x['id'],x['unit']]);x['method']='Seleccionar intento o máximo/media por lado';x['values']={}
@@ -281,7 +281,7 @@ def kin_metrics(result, raw=None):
     if values:
      protocol=friendly(cfg.get('title') or 'Prueba Kinvent')
      config=dict(cfg);config.pop('code',None)
-     out.append({'id':path+'._maxPerSide','name':protocol,'unit':unit,'group':'rom' if unit=='°' else 'force','values':values,'method':'Máximo de picos por repetición y lado' if derived else 'Máximo por lado · resumen Kinvent','protocol':protocol+' · '+str(cfg.get('exerciseType') or ''),'fingerprint':fingerprint(['Kinvent',config,'_maxPerSide',unit]) if config else None,'kpi':'ROM: amplitud articular, según posición del protocolo.' if unit=='°' else 'Fuerza máxima: mayor fuerza registrada en el protocolo evaluado.'})
+     out.append({'id':path+'._maxPerSide','name':protocol,'unit':unit,'group':'rom' if unit=='°' else 'force','values':values,'method':'Máximo de picos por repetición y lado' if derived else 'Máximo por lado · resumen Kinvent','protocol':' · '.join(filter(None,[protocol,spanish_label(cfg.get('exerciseType'))])),'fingerprint':fingerprint(['Kinvent',config,'_maxPerSide',unit]) if config else None,'kpi':'ROM: amplitud articular, según posición del protocolo.' if unit=='°' else 'Fuerza máxima: mayor fuerza registrada en el protocolo evaluado.'})
    for k,v in o.items():
     if k not in ['_resultsPerRep','resultsPerRep','repResults','_forces','forces','_deltas','deltas','_syncedSamples','syncedSamples']:walk(v,path+'.'+k,activity)
   elif isinstance(o,list):
@@ -346,7 +346,7 @@ class Handler(SimpleHTTPRequestHandler):
 
 def main():
  global CID,SECRET,KINVENT,TENANT,TOKEN,SAVED,STORAGE_WARNING
- print('SBS / SB · Aplicación local 0.5.1 · Solo lectura.\nConfigura ambos proveedores desde Conexiones en la pantalla.\n')
+ print('SBS / SB · Aplicación local 0.5.2 · Solo lectura.\nConfigura ambos proveedores desde Conexiones en la pantalla.\n')
  if win_secrets.supported():
   try:SAVED=win_secrets.load()
   except Exception:STORAGE_WARNING='No se pudo recuperar la configuración protegida. Vuelve a configurar las conexiones.'

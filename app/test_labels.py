@@ -14,10 +14,52 @@ EXACT={
 'exercise_template_builtin_sitting_hand_grip_meter_endurance_text':'Agarre sentado · resistencia',
 }
 WORDS={'arm':'brazo','leg':'pierna','head':'cabeza','neck':'cuello','shoulder':'hombro','knee':'rodilla','hip':'cadera','ankle':'tobillo','foot':'pie','hand':'mano','wrist':'muñeca','grip':'agarre','external':'externa','internal':'interna','rotation':'rotación','flexion':'flexión','extension':'extensión','abduction':'abducción','adduction':'aducción','sitting':'sentado','standing':'de pie','endurance':'resistencia','evaluation':'evaluación','hamstrings':'isquiotibiales','quadriceps':'cuádriceps','jump':'salto','balance':'equilibrio','cmj':'CMJ','sj':'SJ','dj':'DJ'}
+LABELS = {
+    'knee': 'Rodilla', 'ankle': 'Tobillo', 'hip': 'Cadera',
+    'shoulder': 'Hombro', 'trunk': 'Tronco', 'neck': 'Cuello',
+    'elbow': 'Codo', 'wrist': 'Muñeca', 'hand': 'Mano', 'foot': 'Pie',
+    'flexion': 'Flexión', 'extension': 'Extensión', 'rotation': 'Rotación',
+    'lateral flexion': 'Flexión lateral', 'external rotation': 'Rotación externa',
+    'internal rotation': 'Rotación interna', 'abduction': 'Abducción',
+    'adduction': 'Aducción', 'plantar flexion': 'Flexión plantar',
+    'dorsiflexion': 'Dorsiflexión', 'eversion': 'Eversión', 'inversion': 'Inversión',
+    'seated': 'Sentado', 'standing': 'De pie', 'supine': 'En decúbito supino',
+    'prone': 'En decúbito prono', 'side lying': 'En decúbito lateral',
+    'cmj': 'Salto con contramovimiento (CMJ)', 'sj': 'Salto desde sentadilla (SJ)',
+    'dj': 'Salto con caída (DJ)', 'imtp': 'Tirón isométrico de medio muslo (IMTP)',
+    'jump height': 'Altura de salto', 'peak force': 'Fuerza máxima',
+    'mean force': 'Fuerza media', 'peak power': 'Potencia máxima',
+    'mean power': 'Potencia media', 'contact time': 'Tiempo de contacto',
+    'flight time': 'Tiempo de vuelo', 'peak landing force': 'Fuerza máxima de aterrizaje',
+    'reactive strength index': 'Índice de fuerza reactiva (RSI)',
+    'modified reactive strength index': 'Índice de fuerza reactiva modificado (mRSI)',
+    'rate of force development': 'Tasa de desarrollo de fuerza',
+    'strength': 'Fuerza', 'range of motion': 'Rango de movimiento',
+    'meter': 'Dinamometría', 'meter endurance': 'Resistencia muscular',
+}
+
+def spanish_label(value):
+    """Traduce etiquetas conocidas y conserva las personalizadas."""
+    original = str(value or '').strip()
+    if not original:
+        return ''
+    if ' · ' in original:
+        return ' · '.join(spanish_label(part) for part in original.split(' · ') if part.strip())
+    position = re.fullmatch(r'Seated(\d+)DegreeKneeFlexion', original, re.IGNORECASE)
+    if position:
+        return f'Sentado, rodilla a {position[1]}° de flexión'
+    words = re.sub(r'(?<=[a-z])(?=[A-Z])', ' ', original).replace('_', ' ').lower()
+    if words in LABELS:
+        return LABELS[words]
+    for suffix, side in [(' left', 'izquierda'), (' right', 'derecha')]:
+        if words.endswith(suffix) and words[:-len(suffix)] in LABELS:
+            return LABELS[words[:-len(suffix)]] + ' ' + side
+    return original
+
 def friendly(title):
  title=str(title or '').strip()
  if title in EXACT:return EXACT[title]
- if not ('_' in title and (title.startswith(('exercise_template_','data_sport_')) or title.endswith(('_text','_title')))):return title or 'Evaluación'
+ if not ('_' in title and (title.startswith(('exercise_template_','data_sport_')) or title.endswith(('_text','_title')))):return spanish_label(title) or 'Evaluación'
  raw=re.sub(r'^(exercise_template_builtin_|exercise_template_|data_sport_)','',title)
  tokens=[t for t in raw.split('_') if t not in ['text','title','builtin']]
  return ' '.join(WORDS.get(t,t) for t in tokens).strip().capitalize() or 'Evaluación Kinvent'
