@@ -72,8 +72,40 @@ async function loadTests(more=false) {
 $('apiTests').onclick=()=>runApi(startTests);
 $('apiMore').onclick=()=>{$('apiMetrics').replaceChildren();runApi(()=>loadTests(true))};
 function aggregate(m,how){if(!m.samples)return {...m.values};let vals={};for(const [limb,samples] of Object.entries(m.samples)){let n=samples.filter(x=>typeof x==='number'&&Number.isFinite(x));if(!n.length)continue;let side=limb.toLowerCase().includes('left')?'left':limb.toLowerCase().includes('right')?'right':'value';let v=how==='mean'?n.reduce((a,b)=>a+b,0)/n.length:how==='max'?Math.max(...n):n[+how];if(v===undefined)continue;if(vals[side]!==undefined)throw Error('Varios tipos de lado corresponden a la misma métrica. Selecciona otra métrica o registra manualmente.');vals[side]=v}return vals}
-async function loadMetrics(t){const patientAtRequest=selectedPatient.id,version=++requestVersion;let d=await callApi('metrics',{key:t.key,patient:patientAtRequest});if(!selectedPatient||selectedPatient.id!==patientAtRequest||version!==requestVersion)return;$('apiMetrics').replaceChildren();const comparisons=loadComparisonCandidates(t,patientAtRequest,version);let heading=document.createElement('h3');heading.style.fontSize='14px';heading.textContent=t.title;$('apiMetrics').append(heading);for(let m of d.metrics||[]){let box=document.createElement('div');box.className='roweditor';let title=document.createElement('strong');title.textContent=m.name+' · '+(m.unit||'unidad sin identificar');box.append(title);let info=document.createElement('p');info.className='hint';info.textContent=m.protocol+' · '+m.method;box.append(info);let label=document.createElement('label');label.textContent='Nombre en el informe';let name=document.createElement('input');name.value=m.name;label.append(name);box.append(label);let method=document.createElement('select');if(m.samples){method.innerHTML='<option value="max">Máximo por lado / valor</option><option value="mean">Media por lado / valor</option>';let n=Math.min(...Object.values(m.samples).map(x=>x.length));for(let i=0;i<n;i++){let o=document.createElement('option');o.value=String(i);o.textContent='Registro '+(i+1)+' por lado (revisar orden)';method.append(o)}box.append(method)}else{method.innerHTML='<option value="summary">Resumen del proveedor</option>'}
-let values=document.createElement('p');values.className='hint';const show=()=>{try{let v=aggregate(m,method.value);values.textContent=Object.entries(v).map(([k,x])=>({left:'Izq.',right:'Der.',value:'Único'}[k])+': '+fmt(x)+' '+m.unit).join(' · ')}catch(e){values.textContent=e.message}};method.onchange=show;box.append(values);show();let controls=document.createElement('div');controls.className='rowtools';for(let [slot,label] of [['initial','Cargar inicial'],['control','Cargar control']]){let b=document.createElement('button');b.textContent=label;b.onclick=()=>{try{if(!m.unit)throw Error('La API no identificó la unidad. No se importa por suposición.');let v=aggregate(m,method.value);if(!Object.keys(v).length)throw Error('No hay valores numéricos para importar.');if(importMetric(m,v,slot,name.value,method.value,d,selectedPatient,t))msg('Resultado cargado como '+(slot==='initial'?'inicial':'control')+'. Revisa la fila importada y define su meta.')}catch(e){msg(e.message)}};controls.append(b)}if(m.fingerprint&&m.unit){
+async function loadMetrics(t){const patientAtRequest=selectedPatient.id,version=++requestVersion;let d=await callApi('metrics',{key:t.key,patient:patientAtRequest});if(!selectedPatient||selectedPatient.id!==patientAtRequest||version!==requestVersion)return;$('apiMetrics').replaceChildren();const comparisons=loadComparisonCandidates(t,patientAtRequest,version);let heading=document.createElement('h3');heading.style.fontSize='14px';heading.textContent=t.title;$('apiMetrics').append(heading);const metrics=d.metrics||[];
+const metricHost=document.createElement('div');
+const jumps=metrics.filter(m=>m.group==='biomech');
+if(jumps.length){
+ const label=document.createElement('label');
+ label.textContent='Parámetro del salto';
+ const chooser=document.createElement('select');
+ const ordered=[...jumps].sort((a,b)=>Number(b.preferred)-Number(a.preferred)||Number(b.direction==='higher')-Number(a.direction==='higher'));
+ const hasDefault=ordered[0].preferred||ordered[0].direction==='higher';
+ if(!hasDefault){
+  const placeholder=document.createElement('option');
+  placeholder.textContent='Elige un parámetro';placeholder.value='';placeholder.disabled=true;placeholder.selected=true;
+  chooser.append(placeholder);
+ }
+ for(const [i,m] of ordered.entries()){
+  const option=document.createElement('option');
+  option.value=String(i);
+  option.textContent=m.parameterName+' · '+(m.unit||'sin unidad identificada');
+  chooser.append(option);
+ }
+ label.append(chooser);
+ $('apiMetrics').append(label);
+ chooser.onchange=()=>showMetrics([ordered[Number(chooser.value)]]);
+ $('apiMetrics').append(metricHost);
+ if(hasDefault)showMetrics([ordered[0]]);
+}else{
+ $('apiMetrics').append(metricHost);
+ showMetrics(metrics);
+}
+msg(d.note||'Revisa las métricas antes de cargar.');
+function showMetrics(items){
+ metricHost.replaceChildren();
+ for(const m of items){let box=document.createElement('div');box.className='roweditor';let title=document.createElement('strong');title.textContent=m.name+' · '+(m.unit||'unidad sin identificar');box.append(title);let info=document.createElement('p');info.className='hint';info.textContent=m.protocol+' · '+m.method;box.append(info);let label=document.createElement('label');label.textContent='Nombre en el informe';let name=document.createElement('input');name.value=m.name;label.append(name);box.append(label);let method=document.createElement('select');if(m.samples){method.innerHTML='<option value="max">Máximo por lado / valor</option><option value="mean">Media por lado / valor</option>';let n=Math.min(...Object.values(m.samples).map(x=>x.length));for(let i=0;i<n;i++){let o=document.createElement('option');o.value=String(i);o.textContent='Registro '+(i+1)+' por lado (revisar orden)';method.append(o)}box.append(method)}else{method.innerHTML='<option value="summary">Resumen del proveedor</option>'}
+let values=document.createElement('p');values.className='hint';const show=()=>{try{let v=aggregate(m,method.value);values.textContent=['left','right','value'].filter(k=>v[k]!==undefined).map(k=>({left:'Izq.',right:'Der.',value:'Resultado'}[k])+': '+fmt(v[k])+' '+m.unit).join(' · ');const a=asym(v.left,v.right);if(m.group==='biomech'&&a!==null)values.textContent+=' · Asimetría: '+fmt(a)+' %'+(v.left===v.right?'':v.left>v.right?' izq.':' der.')}catch(e){values.textContent=e.message}};method.onchange=show;box.append(values);show();let controls=document.createElement('div');controls.className='rowtools';for(let [slot,label] of [['initial','Cargar inicial'],['control','Cargar control']]){let b=document.createElement('button');b.textContent=label;b.onclick=()=>{try{if(!m.unit)throw Error('La API no identificó la unidad. No se importa por suposición.');let v=aggregate(m,method.value);if(!Object.keys(v).length)throw Error('No hay valores numéricos para importar.');if(importMetric(m,v,slot,name.value,method.value,d,selectedPatient,t))msg('Resultado cargado como '+(slot==='initial'?'inicial':'control')+'. Revisa la fila importada y define su meta.')}catch(e){msg(e.message)}};controls.append(b)}if(m.fingerprint&&m.unit){
  const hint=document.createElement('p');
  hint.className='hint';
  hint.textContent='Buscando evaluaciones compatibles en el historial cargado…';
@@ -99,7 +131,9 @@ let values=document.createElement('p');values.className='hint';const show=()=>{t
   refresh(results);
  });
 }
-box.append(controls);$('apiMetrics').append(box)}msg(d.note||'Revisa las métricas antes de cargar.')}
+box.append(controls);metricHost.append(box)}
+}
+}
 function metricShape(values) {
  const sides=Object.keys(values).filter(key=>typeof values[key]==='number'&&Number.isFinite(values[key])).sort();
  if(!sides.length||sides.includes('value')&&sides.length>1)throw Error('La métrica necesita valores numéricos con una lateralidad consistente.');
@@ -109,13 +143,13 @@ function metricRow(metric,values,method,patient,test,label) {
  const single=metricShape(values)==='value';
  const key=metric.fingerprint?[patient.source,patient.id,metric.fingerprint,method,single?'single':'sides'].join('|'):null;
  const existing=key?data.rows.find(row=>row.importKey===key):null;
- if(existing)return {...existing};
+ if(existing)return metric.group==='biomech'?{...existing,name:label,unit:metric.unit,direction:metric.direction||'review'}:{...existing};
  const provider=patient.source==='kinvent'?'Kinvent':test.source==='fd'?'VALD ForceDecks':'VALD DynaMo';
  const aggregation=method==='max'?'máximo':method==='mean'?'media':metric.method;
  return {group:metric.group||'force',format:single?'single':'sides',name:label,unit:metric.unit,
   protocol:[provider,metric.protocol,aggregation].filter(Boolean).join(' · '),initial:'',current:'',
   li:'',ri:'',lc:'',rc:'',metric:single?'current':data.side==='left'?'lc':'rc',op:'>=',goal:'',
-  mode:'auto',direction:'review',importKey:key,origin:'',reviewed:false,kpi:metric.kpi||''};
+  mode:'auto',direction:metric.direction||'review',importKey:key,origin:'',reviewed:false,kpi:metric.kpi||''};
 }
 function writeMetricSlot(row,slot,values,response,date) {
  const initial=slot==='initial';

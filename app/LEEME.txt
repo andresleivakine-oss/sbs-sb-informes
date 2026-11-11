@@ -1,4 +1,4 @@
-SBS / SB · Aplicación local 0.5.12 · Windows
+SBS / SB · Aplicación local 0.5.13 · Windows
 La versión 0.5.9 pone Dolor (EVA) primero y agrega Evaluación Funcional y Neurológica.
 Al actualizar, la configuración anterior de los centros se conserva en este PC.
 

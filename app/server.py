@@ -269,17 +269,36 @@ def force_metrics(trials,meta):
  test_label=spanish_label(test_type)
  kind=decorate({'title':test_type},meta)['kind']
  group='biomech' if kind=='jump' else 'force'
+ preferred='RSI' if test_type.upper().replace(' ','').replace('_','') in {'DJ','SLDJ','DROPJUMP','SINGLELEGDROPJUMP'} else 'JUMP_HEIGHT_IMP_MOM'
+ jump_parameters={
+  'RSI':('RSI (altura por tiempo de vuelo / contacto)','higher'),
+  'REACTIVE_STRENGTH_INDEX':('RSI (tiempo de vuelo / contacto)','higher'),
+  'JUMP_HEIGHT_IMP_MOM':('Altura de salto (impulso–momento)','higher'),
+  'JUMP_HEIGHT':('Altura de salto (tiempo de vuelo)','higher'),
+  'RSI_MODIFIED':('RSI modificado','higher'),
+  'RSI_MODIFIED_IMP_MOM':('RSI modificado (impulso–momento)','higher'),
+ }
+ units={'Centimeter':'cm','Millimeter':'mm','Second':'s','Millisecond':'ms','Newton':'N','Kilo':'kg',
+        'Watt':'W','RSIModified':'m/s','No Unit':'adimensional','Percent':'%'}
  groups={}
  for tr in trials:
   for r in tr.get('results',[]):
    if not isinstance(r,dict) or not finite(r.get('value')):continue
-   definition=r.get('definition') or {};key=str(r.get('resultId'));limb=str(r.get('limb') or tr.get('limb') or 'Trial')
-   metric_label=spanish_label(definition.get('name') or definition.get('result') or 'KPI '+key)
+   definition=r.get('definition') or {}
+   key=str(r.get('resultId'))
+   code=definition.get('result','')
+   raw_unit=definition.get('unit') or ''
+   limb=r.get('limb') or tr.get('limb') or 'Trial'
+   if group=='biomech' and str(limb).lower()=='trial' and tr.get('limb') in {'Left','Right'}:
+    limb=tr['limb']
+   metric_label,direction=jump_parameters.get(code,(spanish_label(definition.get('name') or code or 'KPI '+key),'review'))
    name=' · '.join(filter(None,[test_label,metric_label])) if group=='biomech' else metric_label
-   item=groups.setdefault(key,{'id':key,'name':name,'unit':definition.get('unit') or '', 'samples':{},'group':group,'protocol':test_label,'kpi':''})
-   item['samples'].setdefault(limb,[]).append(r['value'])
+   item=groups.setdefault(key,{'id':key,'name':name,'parameterName':metric_label,'unit':raw_unit,
+      'samples':{},'group':group,'protocol':test_label,'kpi':'','direction':direction if group=='biomech' else 'review',
+      'preferred':group=='biomech' and code==preferred})
+   item['samples'].setdefault(str(limb),[]).append(r['value'])
  config={k:meta.get(k) for k in ['testType','parameter','extendedParameters']}
- for x in groups.values():x['fingerprint']=fingerprint(['ForceDecks',config,x['id'],x['unit']]);x['method']='Seleccionar intento o máximo/media por lado';x['values']={}
+ for x in groups.values():x['fingerprint']=fingerprint(['ForceDecks',config,x['id'],x['unit']]);x['method']='Seleccionar intento o máximo/media por lado';x['values']={};x['unit']=units.get(x['unit'],x['unit'])
  return list(groups.values())
 
 def decode_results(obj,depth=0):
@@ -403,7 +422,7 @@ class Handler(SimpleHTTPRequestHandler):
 
 def main():
  global CID,SECRET,KINVENT,TENANT,TOKEN,SAVED,STORAGE_WARNING
- print('SBS / SB · Aplicación local 0.5.12 · Solo lectura.\nConfigura ambos proveedores desde Conexiones en la pantalla.\n')
+ print('SBS / SB · Aplicación local 0.5.13 · Solo lectura.\nConfigura ambos proveedores desde Conexiones en la pantalla.\n')
  if win_secrets.supported():
   try:SAVED=win_secrets.load()
   except Exception:STORAGE_WARNING='No se pudo recuperar la configuración protegida. Vuelve a configurar las conexiones.'
