@@ -19,6 +19,7 @@ document.getElementById('state').textContent = state;
 const context = vm.createContext({document});
 vm.runInContext(script, context);
 vm.runInContext(`
+  Object.assign(data.brands[data.center],{name:'Centro de prueba',logo:'logo.png',address:'Dirección de prueba',contact:'centro.example',whatsapp:'+56 9 1234 5678',phone:'+56 51 212 3456'});
   data.clinicalReason = 'Motivo anterior';
   data.clinicalFindings = 'Hallazgo simulado';
   data.rows = [
@@ -39,6 +40,10 @@ vm.runInContext(`
   report();
 `, context);
 const report = nodes.get('report').innerHTML;
+assert.match(report, /class="reporthead"><img[^>]+><h1 class="report-title">INFORME KINÉSICO<\/h1><\/div><div class="meta">/);
+assert.match(report, /class="footer"><span><strong>Centro de prueba<\/strong> · Dirección de prueba · centro.example · <a href="https:\/\/wa.me\/56912345678"/);
+assert.equal([...report.matchAll(/Dirección de prueba/g)].length,1);
+assert.match(report, /Tel\.: \+56 51 212 3456/);
 assert.match(report, /Hallazgo simulado/);
 assert.match(report, /Evaluado con equipos VALD y Kinvent/);
 assert.match(report, /KOOS · Subescala de síntomas/);
