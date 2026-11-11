@@ -1,5 +1,5 @@
-SBS / SB · Aplicación local 0.5.20 · Windows
-La versión 0.5.20 alinea las fechas bajo el médico que deriva.
+SBS / SB · Aplicación local 0.5.21 · Windows
+La versión 0.5.21 unifica la tipografía, las columnas y las etiquetas del semáforo.
 Si ya tienes la app instalada, pulsa Actualizar aplicación en la pantalla.
 Al actualizar, la configuración anterior de los centros se conserva en este PC.
 
