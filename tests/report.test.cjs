@@ -20,6 +20,8 @@ const context = vm.createContext({document});
 vm.runInContext(script, context);
 vm.runInContext(`
   Object.assign(data.brands[data.center],{name:'Centro de prueba',logo:'logo.png',address:'Dirección de prueba',contact:'centro.example',whatsapp:'+56 9 1234 5678',phone:'+56 51 212 3456'});
+  data.initialDate = '21-10-2026';
+  data.controlDate = '09-11-2026';
   data.clinicalReason = 'Motivo anterior';
   data.clinicalFindings = 'Hallazgo simulado';
   data.rows = [
@@ -53,7 +55,9 @@ assert.match(report, /Cambio global percibido por el paciente desde el inicio/);
 assert.doesNotMatch(report, /Tamizaje de siete patrones/);
 assert.equal(vm.runInContext("reportNotes([{group:'force', protocol:'Medición manual'}])", context), '');
 assert.match(vm.runInContext("reportNotes([{group:'force', equipment:'Kinvent'}])", context), /equipos Kinvent\./);
-assert.equal([...report.matchAll(/No es necesario reevaluar la asimetría/g)].length, 1);
+assert.doesNotMatch(report, /No es necesario reevaluar la asimetría/);
+assert.match(report, /class="outcome green"><strong>✓ Logrado<\/strong><small>Asimetría inicial 10 %/);
+assert.match(report, /<b>Médico que deriva:<\/b> [^<]*<\/div><div><b>Diagnóstico:<\/b> [^<]*<\/div><div class="meta-dates"><span><b>Inicial:<\/b> 21-10-2026<\/span><span><b>Control:<\/b> 09-11-2026/);
 assert.match(report, /11-11-2026/);
 assert.match(report, /20-11-2026/);
 assert.match(report, /Asimetría ↓ 25 pp/);

@@ -1,5 +1,5 @@
-SBS / SB · Aplicación local 0.5.19 · Windows
-La versión 0.5.19 usa un encabezado compacto y lleva los datos del centro al pie del informe.
+SBS / SB · Aplicación local 0.5.20 · Windows
+La versión 0.5.20 alinea las fechas bajo el médico que deriva.
 Si ya tienes la app instalada, pulsa Actualizar aplicación en la pantalla.
 Al actualizar, la configuración anterior de los centros se conserva en este PC.
 
