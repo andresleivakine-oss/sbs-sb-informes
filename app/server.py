@@ -296,7 +296,9 @@ def force_metrics(trials,meta):
    item=groups.setdefault(key,{'id':key,'name':name,'parameterName':metric_label,'unit':raw_unit,
       'samples':{},'group':group,'protocol':test_label,'kpi':'','direction':direction if group=='biomech' else 'review',
       'preferred':group=='biomech' and code==preferred})
-   item['samples'].setdefault(str(limb),[]).append(r['value'])
+   # ForceDecks returns this distance-over-time unit on a centimetre scale.
+   value=r['value']/100 if raw_unit=='RSIModified' else r['value']
+   item['samples'].setdefault(str(limb),[]).append(value)
  config={k:meta.get(k) for k in ['testType','parameter','extendedParameters']}
  for x in groups.values():x['fingerprint']=fingerprint(['ForceDecks',config,x['id'],x['unit']]);x['method']='Seleccionar intento o máximo/media por lado';x['values']={};x['unit']=units.get(x['unit'],x['unit'])
  return list(groups.values())
@@ -422,7 +424,7 @@ class Handler(SimpleHTTPRequestHandler):
 
 def main():
  global CID,SECRET,KINVENT,TENANT,TOKEN,SAVED,STORAGE_WARNING
- print('SBS / SB · Aplicación local 0.5.13 · Solo lectura.\nConfigura ambos proveedores desde Conexiones en la pantalla.\n')
+ print('SBS / SB · Aplicación local 0.5.14 · Solo lectura.\nConfigura ambos proveedores desde Conexiones en la pantalla.\n')
  if win_secrets.supported():
   try:SAVED=win_secrets.load()
   except Exception:STORAGE_WARNING='No se pudo recuperar la configuración protegida. Vuelve a configurar las conexiones.'
