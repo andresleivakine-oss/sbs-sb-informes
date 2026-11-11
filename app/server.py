@@ -259,8 +259,10 @@ def dynamo_metrics(t):
   if side and finite(v):sides[side]=v
  if not sides:return []
  protocol={k:t.get(k) for k in ['testCategory','bodyRegion','movement','position','customPosition','attachments','leftAttachment','rightAttachment']}
+ setup={key:protocol[key] for key in ('attachments','leftAttachment','rightAttachment')}
+ core={key:protocol[key] for key in ('testCategory','bodyRegion','movement','position','customPosition')}
  name=' · '.join(str(t.get(k) or '') for k in ['bodyRegion','movement']).strip(' ·')
- return [{'id':field,'name':spanish_label(name),'unit':unit,'group':group,'values':sides,'method':'Máximo por lado · resúmenes DynaMo','protocol':spanish_label(' · '.join(str(t.get(k) or '') for k in ['position','customPosition']).strip(' ·')),'fingerprint':fingerprint(['DynaMo',protocol,field,unit]),'kpi':'Fuerza máxima en la posición evaluada.' if group=='force' else 'Amplitud de movimiento; conservar signo y posición del protocolo.'}]
+ return [{'id':field,'name':spanish_label(name),'unit':unit,'group':group,'values':sides,'method':'Máximo por lado · resúmenes DynaMo','protocol':spanish_label(' · '.join(str(t.get(k) or '') for k in ['position','customPosition']).strip(' ·')),'fingerprint':fingerprint(['DynaMo',protocol,field,unit]),'comparisonProtocol':fingerprint(['DynaMo',core,field,unit]),'attachments':setup,'kpi':'Fuerza máxima en la posición evaluada.' if group=='force' else 'Amplitud de movimiento; conservar signo y posición del protocolo.'}]
 
 def force_metrics(trials,meta):
  groups={}
@@ -395,7 +397,7 @@ class Handler(SimpleHTTPRequestHandler):
 
 def main():
  global CID,SECRET,KINVENT,TENANT,TOKEN,SAVED,STORAGE_WARNING
- print('SBS / SB · Aplicación local 0.5.9 · Solo lectura.\nConfigura ambos proveedores desde Conexiones en la pantalla.\n')
+ print('SBS / SB · Aplicación local 0.5.10 · Solo lectura.\nConfigura ambos proveedores desde Conexiones en la pantalla.\n')
  if win_secrets.supported():
   try:SAVED=win_secrets.load()
   except Exception:STORAGE_WARNING='No se pudo recuperar la configuración protegida. Vuelve a configurar las conexiones.'

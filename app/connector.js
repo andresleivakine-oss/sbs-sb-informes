@@ -33,20 +33,34 @@ async function startTests(){
 $('apiSearch').onclick=()=>{searchPage=0;runApi(findPatients)};$('apiQuery').onkeydown=e=>{if(e.key==='Enter')$('apiSearch').click()};$('apiNext').onclick=()=>{if(source()!=='kinvent')return msg('VALD busca en el listado completo de perfiles.');searchPage++;runApi(findPatients)};$('apiPrev').onclick=()=>{searchPage=Math.max(0,searchPage-1);runApi(findPatients)};
 $('apiSource').onchange=()=>{requestVersion++;selectedPatient=null;searchPage=0;$('apiPatients').replaceChildren();$('apiHistory').hidden=true;$('apiMetrics').replaceChildren();syncSource();msg('Busca un paciente en la fuente elegida. El informe actual se conserva hasta seleccionar otro paciente.')};
 async function loadTests(more=false){if(!selectedPatient)throw Error('Selecciona primero un paciente.');const version=++requestVersion;const d=await callApi('tests',{source:selectedPatient.source,patient:selectedPatient.id,system:selectedPatient.source==='vald'?$('apiSystem').value:undefined,start:$('apiFrom').value,end:$('apiTo').value,page:listPage,cursor:more?cursor:''});if(version!==requestVersion)return;let added=0;for(let t of d.tests||[]){if(seenTests.has(t.key))continue;seenTests.add(t.key);added++;loadedTests.push(t)}renderTests();let stalled=more&&d.cursor&&d.cursor===cursor;cursor=d.cursor||'';$('apiMore').hidden=!d.more||stalled;$('apiHistoryNote').textContent=(d.received!==undefined?'Kinvent: '+d.received+' registros recibidos; '+(d.excluded||0)+' fuera del intervalo. ':'')+(d.note||'')+(stalled?' La paginación no avanzó; no se afirma que el historial esté completo.':'');msg(added?added+' evaluaciones cargadas desde '+(selectedPatient.source==='vald'?'VALD':'Kinvent')+'. Selecciona una para ver los KPI.':d.more?'Sin pruebas nuevas en esta respuesta. Usa Cargar más si está disponible.':(d.received?'Hay registros en Kinvent, pero no coinciden con el intervalo. Amplía las fechas.':'La consulta respondió sin evaluaciones para este perfil. Comprueba el perfil y las fechas.'));}
-$('apiTests').onclick=()=>runApi(startTests);$('apiMore').onclick=()=>{listPage++;runApi(()=>loadTests(true))};
+$('apiTests').onclick=()=>runApi(startTests);$('apiMore').onclick=()=>{$('apiMetrics').replaceChildren();listPage++;runApi(()=>loadTests(true))};
 function aggregate(m,how){if(!m.samples)return {...m.values};let vals={};for(const [limb,samples] of Object.entries(m.samples)){let n=samples.filter(x=>typeof x==='number'&&Number.isFinite(x));if(!n.length)continue;let side=limb.toLowerCase().includes('left')?'left':limb.toLowerCase().includes('right')?'right':'value';let v=how==='mean'?n.reduce((a,b)=>a+b,0)/n.length:how==='max'?Math.max(...n):n[+how];if(v===undefined)continue;if(vals[side]!==undefined)throw Error('Varios tipos de lado corresponden a la misma métrica. Selecciona otra métrica o registra manualmente.');vals[side]=v}return vals}
-async function loadMetrics(t){const patientAtRequest=selectedPatient.id,version=++requestVersion;let d=await callApi('metrics',{key:t.key,patient:patientAtRequest});if(!selectedPatient||selectedPatient.id!==patientAtRequest||version!==requestVersion)return;$('apiMetrics').replaceChildren();let heading=document.createElement('h3');heading.style.fontSize='14px';heading.textContent=t.title;$('apiMetrics').append(heading);for(let m of d.metrics||[]){let box=document.createElement('div');box.className='roweditor';let title=document.createElement('strong');title.textContent=m.name+' · '+(m.unit||'unidad sin identificar');box.append(title);let info=document.createElement('p');info.className='hint';info.textContent=m.protocol+' · '+m.method;box.append(info);let label=document.createElement('label');label.textContent='Nombre en el informe';let name=document.createElement('input');name.value=m.name;label.append(name);box.append(label);let method=document.createElement('select');if(m.samples){method.innerHTML='<option value="max">Máximo por lado / valor</option><option value="mean">Media por lado / valor</option>';let n=Math.min(...Object.values(m.samples).map(x=>x.length));for(let i=0;i<n;i++){let o=document.createElement('option');o.value=String(i);o.textContent='Registro '+(i+1)+' por lado (revisar orden)';method.append(o)}box.append(method)}else{method.innerHTML='<option value="summary">Resumen del proveedor</option>'}
+async function loadMetrics(t){const patientAtRequest=selectedPatient.id,version=++requestVersion;let d=await callApi('metrics',{key:t.key,patient:patientAtRequest});if(!selectedPatient||selectedPatient.id!==patientAtRequest||version!==requestVersion)return;$('apiMetrics').replaceChildren();const comparisons=loadComparisonCandidates(t,patientAtRequest,version);let heading=document.createElement('h3');heading.style.fontSize='14px';heading.textContent=t.title;$('apiMetrics').append(heading);for(let m of d.metrics||[]){let box=document.createElement('div');box.className='roweditor';let title=document.createElement('strong');title.textContent=m.name+' · '+(m.unit||'unidad sin identificar');box.append(title);let info=document.createElement('p');info.className='hint';info.textContent=m.protocol+' · '+m.method;box.append(info);let label=document.createElement('label');label.textContent='Nombre en el informe';let name=document.createElement('input');name.value=m.name;label.append(name);box.append(label);let method=document.createElement('select');if(m.samples){method.innerHTML='<option value="max">Máximo por lado / valor</option><option value="mean">Media por lado / valor</option>';let n=Math.min(...Object.values(m.samples).map(x=>x.length));for(let i=0;i<n;i++){let o=document.createElement('option');o.value=String(i);o.textContent='Registro '+(i+1)+' por lado (revisar orden)';method.append(o)}box.append(method)}else{method.innerHTML='<option value="summary">Resumen del proveedor</option>'}
 let values=document.createElement('p');values.className='hint';const show=()=>{try{let v=aggregate(m,method.value);values.textContent=Object.entries(v).map(([k,x])=>({left:'Izq.',right:'Der.',value:'Único'}[k])+': '+fmt(x)+' '+m.unit).join(' · ')}catch(e){values.textContent=e.message}};method.onchange=show;box.append(values);show();let controls=document.createElement('div');controls.className='rowtools';for(let [slot,label] of [['initial','Cargar inicial'],['control','Cargar control']]){let b=document.createElement('button');b.textContent=label;b.onclick=()=>{try{if(!m.unit)throw Error('La API no identificó la unidad. No se importa por suposición.');let v=aggregate(m,method.value);if(!Object.keys(v).length)throw Error('No hay valores numéricos para importar.');if(importMetric(m,v,slot,name.value,method.value,d,selectedPatient,t))msg('Resultado cargado como '+(slot==='initial'?'inicial':'control')+'. Revisa la fila importada y define su meta.')}catch(e){msg(e.message)}};controls.append(b)}if(m.fingerprint&&m.unit){
  const hint=document.createElement('p');
  hint.className='hint';
- hint.textContent='Compara dentro de las evaluaciones cargadas para esta prueba. Amplía las fechas o pulsa Cargar más para incluir otras mediciones.';
+ hint.textContent='Buscando evaluaciones compatibles en el historial cargado…';
  box.append(hint);
- for(const [mode,caption] of [['firstLast','Inicial y final'],['latest','Dos últimas']]){
+ const buttons=[['firstLast','Inicial y final'],['latest','Dos últimas']].map(([mode,caption])=>{
   const button=document.createElement('button');
   button.textContent=caption;
-  button.onclick=()=>runApi(()=>compareMetric(m,method.value,name.value,t,d,mode,button));
+  button.hidden=true;
   controls.append(button);
- }
+  return {button,mode};
+ });
+ const refresh=results=>{
+  const pairs=buttons.map(({mode})=>comparisonPair(m,method.value,t,d,results,mode));
+  buttons.forEach(({button,mode},i)=>{
+   button.hidden=!pairs[i];
+   button.onclick=()=>{if(version===requestVersion&&pairs[i])runApi(()=>applyComparison(m,method.value,name.value,t,pairs[i],mode));};
+  });
+  hint.textContent=pairs.some(Boolean)?'Hay dos o más evaluaciones compatibles en el historial cargado.':'Sin dos evaluaciones compatibles en el historial cargado. Puedes ampliar las fechas o usar Cargar más.';
+ };
+ comparisons.then(results=>{
+  if(version!==requestVersion)return;
+  method.onchange=()=>{show();refresh(results)};
+  refresh(results);
+ });
 }
 box.append(controls);$('apiMetrics').append(box)}msg(d.note||'Revisa las métricas antes de cargar.')}
 function metricShape(values) {
@@ -101,45 +115,72 @@ function importMetric(metric,values,slot,label,method,response,patient,test) {
  saveMetricRow(row,patient);
  return true;
 }
-function selectComparison(records,mode) {
- const dated=records.filter(record=>evaluationDate(record.response.date));
- const unique=[...new Map(dated.map(record=>[record.response.test,record])).values()];
- unique.sort((a,b)=>Date.parse(a.response.date)-Date.parse(b.response.date));
- if(unique.length<2)throw Error('Se necesitan dos evaluaciones fechadas de esta métrica, con el mismo protocolo, unidad y lateralidad.');
- return [unique[mode==='latest'?unique.length-2:0],unique[unique.length-1]];
+async function loadComparisonCandidates(test,patient,version) {
+ const results=[];
+ const candidates=loadedTests.filter(other=>other.key!==test.key&&other.source===test.source&&other.title===test.title&&evaluationDate(other.date));
+ for(const other of candidates){
+  if(requestVersion!==version)return [];
+  try{
+   const response=await callApi('metrics',{key:other.key,patient});
+   results.push({response,test:other});
+  }catch(error){continue;}
+ }
+ return results;
 }
-async function compareMetric(metric,method,label,test,response,mode,button) {
- const patient=selectedPatient;
- const version=requestVersion;
- if(!patient||!metric.unit||!metric.fingerprint)throw Error('Usa la selección manual para esta métrica.');
- const values=aggregate(metric,method);
- const shape=metricShape(values);
- const records=[{values,response,test}];
- const candidates=loadedTests.filter(other=>other.key!==test.key&&other.source===test.source&&other.title===test.title);
- button.disabled=true;
- try{
-  for(const [index,other] of candidates.entries()){
-   msg('Revisando evaluaciones compatibles ('+(index+1)+' de '+candidates.length+')…');
-   const result=await callApi('metrics',{key:other.key,patient:patient.id});
-   if(selectedPatient!==patient||requestVersion!==version)return;
-   const match=result.metrics?.find(item=>item.fingerprint===metric.fingerprint&&item.unit===metric.unit&&item.group===metric.group);
-   if(!match)continue;
-   const otherValues=aggregate(match,method);
-   try{if(metricShape(otherValues)===shape)records.push({values:otherValues,response:result,test:other});}
-   catch(error){continue;}
+function attachmentCompatibility(metric,other) {
+ if(other.unit!==metric.unit||other.group!==metric.group)return null;
+ if(other.fingerprint===metric.fingerprint)return false;
+ if(!metric.comparisonProtocol||metric.comparisonProtocol!==other.comparisonProtocol)return null;
+ const normalize=value=>['','none','unknown'].includes(String(value??'').trim().toLowerCase())?'':String(value).trim();
+ let unknown=false;
+ for(const key of ['attachments','leftAttachment','rightAttachment']){
+  const a=normalize(metric.attachments?.[key]),b=normalize(other.attachments?.[key]);
+  if(a&&b&&a!==b)return null;
+  if(a!==b)unknown=true;
+ }
+ return unknown;
+}
+function comparisonPair(metric,method,test,response,results,mode) {
+ if(!evaluationDate(response.date))return null;
+ let values,shape;
+ try{values=aggregate(metric,method);shape=metricShape(values)}catch(error){return null}
+ const records=[{metric,values,response,test}];
+ for(const record of results){
+  for(const other of record.response.metrics||[]){
+   if(attachmentCompatibility(metric,other)===null)continue;
+   try{
+    const otherValues=aggregate(other,method);
+    if(metricShape(otherValues)!==shape)continue;
+    records.push({...record,metric:other,values:otherValues});
+    break;
+   }catch(error){continue;}
   }
-  const [first,last]=selectComparison(records,mode);
-  const firstDate=evaluationDate(first.response.date);
-  const lastDate=evaluationDate(last.response.date);
-  const pairLabel=mode==='latest'?'Dos últimas':'Inicial y final';
-  const row=metricRow(metric,values,method,patient,test,label);
-  if(!confirm(pairLabel+' entre las evaluaciones cargadas: '+firstDate+' → '+lastDate+'. ¿Cargar estas dos fechas en el informe?'))return;
-  writeMetricSlot(row,'initial',first.values,first.response,firstDate);
-  writeMetricSlot(row,'control',last.values,last.response,lastDate);
-  row.comparisonMode=pairLabel;
-  saveMetricRow(row,patient);
-  msg(pairLabel+': '+firstDate+' → '+lastDate+'. Revisa la fila importada.');
- }finally{button.disabled=false;}
+ }
+ const ordered=records.filter(r=>evaluationDate(r.response.date)).sort((a,b)=>Date.parse(a.response.date)-Date.parse(b.response.date));
+ for(let last=ordered.length-1;last>0;last--){
+  for(let first=mode==='latest'?last-1:0;first>=0&&first<last;first+=mode==='latest'?-1:1){
+   const a=ordered[first],b=ordered[last];
+   if(a.response.test===b.response.test||Date.parse(a.response.date)===Date.parse(b.response.date))continue;
+   const unknown=attachmentCompatibility(a.metric,b.metric);
+   if(unknown!==null)return {a,b,unknown};
+  }
+ }
+ return null;
+}
+async function applyComparison(metric,method,label,test,pair,mode) {
+ const patient=selectedPatient;
+ const {a,b,unknown}=pair;
+ const firstDate=evaluationDate(a.response.date);
+ const lastDate=evaluationDate(b.response.date);
+ const pairLabel=mode==='latest'?'Dos últimas':'Inicial y final';
+ const warning=unknown?' VALD no especifica todos los accesorios en ambas evaluaciones. Confirma que el montaje fue el mismo.':'';
+ if(!confirm(pairLabel+': '+firstDate+' → '+lastDate+'.'+warning+' ¿Cargar ambas evaluaciones?'))return;
+ const row=metricRow(metric,aggregate(metric,method),method,patient,test,label);
+ writeMetricSlot(row,'initial',a.values,a.response,firstDate);
+ writeMetricSlot(row,'control',b.values,b.response,lastDate);
+ row.comparisonMode=pairLabel;
+ saveMetricRow(row,patient);
+ msg(pairLabel+': '+firstDate+' → '+lastDate+'. Revisa la fila importada.');
 }
 // El HTML descargado conserva datos e identidad, sin secretos ni conexión obligatoria.
 const baseSave=$('save').onclick;$('save').onclick=()=>{baseSave()};
