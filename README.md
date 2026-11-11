@@ -6,7 +6,7 @@ Aplicación local para SB Sports y Centro Médico San Bartolomé. Integra lectur
 
 [Descargar el paquete de instalación](https://raw.githubusercontent.com/andresleivakine-oss/sbs-sb-informes/main/downloads/SBS_SB_Conectado.zip)
 
-Requiere Windows y Python 3.10 o posterior. Si ya tienes una versión instalada, abre **Actualizar SBS SB** desde Inicio y selecciona este ZIP, sin extraerlo. Si no tienes ese acceso, extrae el ZIP completo y abre `INSTALAR.bat`.
+Requiere Windows y Python 3.10 o posterior. Si ya tienes la app instalada, abre **Abrir SBS SB** y pulsa **Actualizar aplicación**. Para una instalación nueva con el paquete de GitHub, extrae el ZIP completo y abre `INSTALAR.bat`. El acceso **Actualizar SBS SB** del menú Inicio acepta el ZIP sin extraer como respaldo.
 
 Desde la versión 0.5.0 aparece **Actualizar aplicación** dentro de la pantalla. Comprueba versiones al abrir; cuando exista una nueva, la descarga, verifica SHA-256 y pide confirmación antes de reiniciar e instalar. No exige cuenta GitHub en cada equipo. El menú Inicio conserva la actualización manual como respaldo.
 
@@ -20,7 +20,9 @@ La cuenta que publique en este repositorio controla el código de las actualizac
 
 Lectores, reglas, manifiesto, hash, versión y filtros probados con respuestas simuladas. Kinvent: búsqueda e historial observados previamente en cuenta real; lectura de valores pendiente de contraste con una evaluación conocida. VALD: acceso observado en cuenta real. La instalación/reapertura automática debe probarse en Windows antes de distribuir a todo el equipo.
 
-Semáforo de fuerza bilateral definido por el centro: <15% verde, 15–20% amarillo, >20% rojo. Indica simetría, no recuperación de fuerza absoluta. GROC solo final.
+Semáforo de fuerza bilateral definido por el centro: <15% verde, 15–20% amarillo, >20% rojo. La asimetría se calcula a partir de los valores por lado. Un inicial en verde indica que el criterio de simetría del centro permite omitir ese control. GROC solo final.
+
+Pruebas de regresión del informe y fechas: `node tests/report.test.cjs`.
 
 ## Mantener las versiones
 

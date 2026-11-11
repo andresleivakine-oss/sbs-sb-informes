@@ -1,13 +1,14 @@
-SBS / SB · Aplicación local 0.5.15 · Windows
-La versión 0.5.9 pone Dolor (EVA) primero y agrega Evaluación Funcional y Neurológica.
+SBS / SB · Aplicación local 0.5.16 · Windows
+La versión 0.5.16 incorpora un resumen clínico y fechas por prueba.
+Si ya tienes la app instalada, pulsa Actualizar aplicación en la pantalla.
 Al actualizar, la configuración anterior de los centros se conserva en este PC.
 
 INSTALACIÓN INICIAL
 1. Cierra la versión anterior (Ctrl+C en su consola).
 2. Extrae el ZIP completo una vez y abre INSTALAR.bat.
 3. Busca "Abrir SBS SB" en el menú Inicio de Windows.
-Paquete para Windows de 64 bits (x64). Incluye Python 3.13.16.
-Extrae todos los archivos antes de instalar. No requiere instalar Python por separado.
+El paquete liviano de GitHub requiere Python 3.10 o posterior con el lanzador py.
+Si instalaste una edición con Python incluido, el actualizador reutiliza ese Python.
 También puedes usar INICIAR.bat para probar sin instalar.
 La consola debe mantenerse abierta mientras trabajas. Abre la app desde el menú Inicio después de instalar.
 

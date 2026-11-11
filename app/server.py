@@ -62,6 +62,20 @@ def utc(s,end=False):
  if end:d+=__import__('datetime').timedelta(days=1)
  return d.strftime('%Y-%m-%dT00:00:00.000Z')
 
+def recorded_at(value):
+ try:
+  date=datetime.fromisoformat(str(value).replace('Z','+00:00'))
+  return date.replace(tzinfo=timezone.utc) if date.tzinfo is None else date.astimezone(timezone.utc)
+ except ValueError:return None
+
+def report_boundary(value,fallback):
+ base=recorded_at(fallback)
+ if value is None:return base
+ parsed=recorded_at(value)
+ if parsed is None or abs((parsed-base).total_seconds())>12*3600:
+  raise UserError('El límite horario de la consulta no es válido.')
+ return parsed
+
 def birthdate(value):
  if value in [None,'',0]:return ''
  try:
@@ -214,7 +228,11 @@ def search(d):
 
 def list_tests(d):
  source=d.get('source');pid=ident(d.get('patient'));start=utc(d.get('start'));end=utc(d.get('end'),True)
- if start>=end:raise UserError('La fecha inicial debe ser anterior o igual a la final.')
+ start_at=report_boundary(d.get('startUtc'),start)
+ end_at=report_boundary(d.get('endUtc'),end)
+ if start_at>=end_at:raise UserError('La fecha inicial debe ser anterior o igual a la final.')
+ start=start_at.isoformat(timespec='milliseconds').replace('+00:00','Z')
+ end=end_at.isoformat(timespec='milliseconds').replace('+00:00','Z')
  if source=='vald':
   if not any(p['id']==pid for p in profiles()):raise UserError('Selecciona un paciente de la búsqueda.')
   system=d.get('system');params={'tenantId':TENANT,'modifiedFromUtc':d.get('cursor') or start,'profileId':pid}
@@ -229,7 +247,8 @@ def list_tests(d):
    id_=t.get('testId') or t.get('id');date=t.get('recordedDateUtc') or t.get('startTimeUTC') or '';profile=t.get('profileId') or t.get('athleteId')
    if profile and str(profile)!=pid:continue
    # Fechas se filtran también por realización, no solo modificación.
-   if date and not start[:10]<=str(date)[:10]<end[:10]:continue
+   measured=recorded_at(date)
+   if measured is not None and not start_at<=measured<end_at:continue
    if not id_:continue
    title=t.get('testType') if system=='fd' else ' · '.join(str(t.get(k) or '') for k in ['bodyRegion','movement','position'])
    key=source+':'+system+':'+str(id_);TESTS[key]={'raw':t,'patient':pid,'system':system,'date':date}
@@ -243,7 +262,8 @@ def list_tests(d):
   id_=t.get('code') or t.get('protocolCode');date=min((a.get('startTime') for a in t.get('activities',[]) if isinstance(a.get('startTime'),(int,float))),default=None) or ''
   if isinstance(date,(int,float)):date=datetime.fromtimestamp(date/1000 if date>1e11 else date,timezone.utc).isoformat()
   if not id_:continue
-  if date and not start[:10]<=str(date)[:10]<end[:10]:
+  measured=recorded_at(date)
+  if measured is not None and not start_at<=measured<end_at:
    excluded+=1;continue
   key='kinvent:'+str(id_);TESTS[key]={'raw':t,'patient':pid,'system':'kinvent','date':date}
   title=t.get('name') or t.get('title') or (t.get('config') or {}).get('title') or ' · '.join(str((a.get('config') or {}).get('title') or '') for a in t.get('activities',[])) or 'Evaluación Kinvent'
@@ -424,7 +444,7 @@ class Handler(SimpleHTTPRequestHandler):
 
 def main():
  global CID,SECRET,KINVENT,TENANT,TOKEN,SAVED,STORAGE_WARNING
- print('SBS / SB · Aplicación local 0.5.15 · Solo lectura.\nConfigura ambos proveedores desde Conexiones en la pantalla.\n')
+ print('SBS / SB · Aplicación local 0.5.16 · Solo lectura.\nConfigura ambos proveedores desde Conexiones en la pantalla.\n')
  if win_secrets.supported():
   try:SAVED=win_secrets.load()
   except Exception:STORAGE_WARNING='No se pudo recuperar la configuración protegida. Vuelve a configurar las conexiones.'

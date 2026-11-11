@@ -4,7 +4,7 @@ const msg=t=>document.getElementById('apiMessage').textContent=t;
 async function callApi(path,body={}){if(!apiSession){const s=await fetch('/api/session').then(r=>r.json());apiSession=s.session}const r=await fetch('/api/'+path,{method:'POST',headers:{'Content-Type':'application/json','X-Session-Token':apiSession},body:JSON.stringify(body),signal:AbortSignal.timeout(60000)});let d=await r.json();if(!r.ok)throw Error(d.error||'No se pudo consultar');return d}
 async function runApi(fn){try{msg('Consultando…');await fn()}catch(e){msg(e.name==='TimeoutError'?'La consulta tardó más de 60 segundos. Inténtalo de nuevo.':e.message||'No se pudo conectar con el servicio local. Abre INICIAR.bat.')}}
 function source(){return $('apiSource').value}
-function clearClinical(){data.rows=[];data.patient='';data.diagnosis='';data.doctor='';data.initialDate='';data.controlDate='';data.suggestions='';data.draft=false;editors();report()}
+function clearClinical(){data.rows=[];data.patient='';data.diagnosis='';data.doctor='';data.initialDate='';data.controlDate='';data.suggestions='';data.clinicalReason='';data.clinicalFindings='';data.clinicalNextStep='';data.draft=false;editors();report()}
 async function findPatients(){if(!configuration[source()])throw Error(source()==='vald'?'Abre Conexiones y configura VALD. No hace falta cerrar ni reiniciar.':'Abre Conexiones y configura Kinvent. No hace falta cerrar ni reiniciar.');const version=++requestVersion;const d=await callApi('search',{source:source(),query:$('apiQuery').value,page:searchPage,refresh:true,athlete:$('apiAthlete').checked});if(version!==requestVersion)return;$('apiPatients').replaceChildren();for(let p of d.patients||[]){let b=document.createElement('button');b.style.cssText='display:block;width:100%;text-align:left;margin:7px 0';b.textContent=p.name+(p.birth?' · '+p.birth:'')+' · '+String(p.id).slice(-6);b.onclick=()=>runApi(()=>selectPatient(p));$('apiPatients').append(b)}msg(d.patients?.length?'Selecciona al paciente correcto antes de consultar evaluaciones.':(searchPage?'Sin resultados en esta página.':'No se encontraron perfiles. En Kinvent prueba también la opción Perfil deportista.'))}
 
 function syncSource(){
@@ -17,7 +17,7 @@ function syncSource(){
 }
 async function selectPatient(p){
  const same=selectedPatient?.id===p.id&&selectedPatient?.source===p.source;
- if(!same&&(data.rows.length||data.diagnosis||data.suggestions)&&!confirm('Cambiar de paciente vaciará el caso abierto. Guarda antes el informe si necesitas conservarlo. ¿Continuar?')){msg('Se conservó el paciente actual.');return;}
+ if(!same&&(data.rows.length||data.diagnosis||data.suggestions||data.clinicalReason||data.clinicalFindings||data.clinicalNextStep)&&!confirm('Cambiar de paciente vaciará el caso abierto. Guarda antes el informe si necesitas conservarlo. ¿Continuar?')){msg('Se conservó el paciente actual.');return;}
  selectedPatient=p;requestVersion++;
  if(!same){clearClinical();data.patient=p.name;if(!data.centerPinned)setReportCenter(p.source==='vald'?'SBS':'SB');editors();report();}
  $('selectedPatient').textContent=(p.source==='vald'?'VALD':'Kinvent')+' · '+p.name+(p.birth?' · Nac. '+p.birth:'');
@@ -32,6 +32,21 @@ async function startTests(){
 
 $('apiSearch').onclick=()=>{searchPage=0;runApi(findPatients)};$('apiQuery').onkeydown=e=>{if(e.key==='Enter')$('apiSearch').click()};$('apiNext').onclick=()=>{if(source()!=='kinvent')return msg('VALD busca en el listado completo de perfiles.');searchPage++;runApi(findPatients)};$('apiPrev').onclick=()=>{searchPage=Math.max(0,searchPage-1);runApi(findPatients)};
 $('apiSource').onchange=()=>{requestVersion++;selectedPatient=null;searchPage=0;$('apiPatients').replaceChildren();$('apiHistory').hidden=true;$('apiMetrics').replaceChildren();syncSource();msg('Busca un paciente en la fuente elegida. El informe actual se conserva hasta seleccionar otro paciente.')};
+function chileDayBoundary(day,end=false){
+ const match=/^(\d{4})-(\d{2})-(\d{2})$/.exec(day);
+ if(!match)throw Error('Selecciona fechas válidas.');
+ const wanted=new Date(Date.UTC(+match[1],+match[2]-1,+match[3]+Number(end)));
+ const formatter=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santiago',year:'numeric',month:'2-digit',day:'2-digit'});
+ const target=wanted.toISOString().slice(0,10);
+ let low=wanted.getTime()-12*3600000,high=wanted.getTime()+12*3600000;
+ while(high-low>1){
+  const middle=Math.floor((high+low)/2);
+  const parts=Object.fromEntries(formatter.formatToParts(new Date(middle)).map(({type,value})=>[type,value]));
+  if(parts.year+'-'+parts.month+'-'+parts.day<target)low=middle;
+  else high=middle;
+ }
+ return new Date(high).toISOString();
+}
 async function loadTests(more=false) {
  if(!selectedPatient)throw Error('Selecciona primero un paciente.');
  const version=++requestVersion,patient=selectedPatient;
@@ -41,7 +56,7 @@ async function loadTests(more=false) {
  const replies=await Promise.allSettled(pending.map(system=>{
   const previous=historyPages.get(system);
   return callApi('tests',{source:patient.source,patient:patient.id,system,
-   start:$('apiFrom').value,end:$('apiTo').value,page:(previous?.page||0)+1,cursor:previous?.cursor||''});
+   start:$('apiFrom').value,end:$('apiTo').value,startUtc:chileDayBoundary($('apiFrom').value),endUtc:chileDayBoundary($('apiTo').value,true),page:(previous?.page||0)+1,cursor:previous?.cursor||''});
  }));
  if(version!==requestVersion)return;
  let added=0,failures=[],notes=[];
@@ -147,7 +162,7 @@ function metricRow(metric,values,method,patient,test,label) {
  const provider=patient.source==='kinvent'?'Kinvent':test.source==='fd'?'VALD ForceDecks':'VALD DynaMo';
  const aggregation=method==='max'?'máximo':method==='mean'?'media':metric.method;
  return {group:metric.group||'force',format:single?'single':'sides',name:label,unit:metric.unit,
-  protocol:[provider,metric.protocol,aggregation].filter(Boolean).join(' · '),initial:'',current:'',
+  protocol:[provider,metric.group==='biomech'?'':metric.protocol,aggregation].filter(Boolean).join(' · '),initial:'',current:'',
   li:'',ri:'',lc:'',rc:'',metric:single?'current':data.side==='left'?'lc':'rc',op:'>=',goal:'',
   mode:'auto',direction:metric.direction||'review',importKey:key,origin:'',reviewed:false,kpi:metric.kpi||''};
 }
@@ -158,14 +173,13 @@ function writeMetricSlot(row,slot,values,response,date) {
  row[initial?'initial':'current']=values.value??'';
  row[initial?'initialDate':'controlDate']=date;
  row[initial?'initialTest':'controlTest']=response.test;
+ row[initial?'initialRecordedAt':'controlRecordedAt']=response.date||'';
 }
 function saveMetricRow(row,patient) {
  row.origin='Paciente '+patient.name+' · Inicial: '+(row.initialTest||'sin cargar')+' · Control: '+(row.controlTest||'sin cargar');
  row.reviewed=false;
  const index=row.importKey?data.rows.findIndex(x=>x.importKey===row.importKey):-1;
  if(index<0)data.rows.push(row);else data.rows[index]=row;
- if(row.initialDate)data.initialDate=row.initialDate;
- if(row.controlDate)data.controlDate=row.controlDate;
  editors();
  report();
 }
