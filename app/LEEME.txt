@@ -1,4 +1,4 @@
-SBS / SB · Aplicación local 0.5.0 · Windows
+SBS / SB · Aplicación local 0.5.7 · Windows
 
 INSTALACIÓN INICIAL
 1. Cierra la versión anterior (Ctrl+C en su consola).
@@ -41,7 +41,7 @@ Carga cada KPI como inicial o control. Verifica prueba, lado, unidad, método y
 fechas. Define una meta clínica o valoración manual y marca la revisión.
 Completa cuestionarios, ROM, sugerencias y firma/identificación del profesional.
 Guardar HTML conserva el caso y el editor manual local. No hay autoguardado.
-Imprimir / PDF: A4, escala 100%, sin encabezados/pies del navegador.
+Guardar PDF o imprimir: papel Carta (216 × 279 mm), escala 100%, sin encabezados ni pies del navegador.
 Comprueba la vista previa: muchas filas pueden exceder dos páginas.
 Los colores representan metas individuales, no autorización de alta.
 
