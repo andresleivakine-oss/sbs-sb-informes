@@ -1,4 +1,4 @@
-SBS / SB · Aplicación local 0.5.7 · Windows
+SBS / SB · Aplicación local 0.5.8 · Windows
 
 INSTALACIÓN INICIAL
 1. Cierra la versión anterior (Ctrl+C en su consola).

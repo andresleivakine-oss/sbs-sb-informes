@@ -19,7 +19,7 @@ async function selectPatient(p){
  const same=selectedPatient?.id===p.id&&selectedPatient?.source===p.source;
  if(!same&&(data.rows.length||data.diagnosis||data.suggestions)&&!confirm('Cambiar de paciente vaciará el caso abierto. Guarda antes el informe si necesitas conservarlo. ¿Continuar?')){msg('Se conservó el paciente actual.');return;}
  selectedPatient=p;requestVersion++;
- if(!same){clearClinical();data.patient=p.name;if(!data.centerPinned)data.center=p.source==='vald'?'SBS':'SB';editors();report();}
+ if(!same){clearClinical();data.patient=p.name;if(!data.centerPinned)setReportCenter(p.source==='vald'?'SBS':'SB');editors();report();}
  $('selectedPatient').textContent=(p.source==='vald'?'VALD':'Kinvent')+' · '+p.name+(p.birth?' · Nac. '+p.birth:'');
  $('apiHistory').hidden=false;syncSource();await startTests();
 }
