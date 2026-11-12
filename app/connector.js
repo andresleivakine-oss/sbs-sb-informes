@@ -17,9 +17,9 @@ function syncSource(){
 }
 async function selectPatient(p){
  const same=selectedPatient?.id===p.id&&selectedPatient?.source===p.source;
- const linkedRows=data.rows.filter(row=>row.importKey);
- const restoredSame=!selectedPatient&&data.patient===p.name&&linkedRows.length>0&&
-  linkedRows.every(row=>String(row.importKey).startsWith(p.source+'|'+p.id+'|'));
+ const linkedKeys=data.rows.flatMap(row=>row.importKey?[row.importKey]:String(row.pairedImportKeys||'').split('\n').filter(Boolean));
+ const restoredSame=!selectedPatient&&data.patient===p.name&&linkedKeys.length>0&&
+  linkedKeys.every(key=>key.startsWith(p.source+'|'+p.id+'|'));
  const keepCase=same||restoredSame;
  if(!keepCase&&(data.rows.length||data.diagnosis||data.suggestions||data.clinicalReason||data.clinicalFindings||data.clinicalNextStep)&&!confirm('Cambiar de paciente vaciará el caso abierto. Guarda antes el informe si necesitas conservarlo. ¿Continuar?')){msg('Se conservó el paciente actual.');return;}
  selectedPatient=p;requestVersion++;
@@ -159,8 +159,9 @@ function metricShape(values) {
  return sides.join(',');
 }
 function metricRow(metric,values,method,patient,test,label) {
- const single=metricShape(values)==='value';
- const key=metric.fingerprint?[patient.source,patient.id,metric.fingerprint,method,single?'single':'sides'].join('|'):null;
+ const shape=metricShape(values);
+ const single=shape==='value';
+ const key=metric.fingerprint?[patient.source,patient.id,metric.fingerprint,method,single?'single':shape==='left,right'?'sides':shape].join('|'):null;
  const existing=key?data.rows.find(row=>row.importKey===key):null;
  if(existing)return metric.group==='biomech'?{...existing,name:label,unit:metric.unit,direction:metric.direction||'review'}:{...existing};
  const provider=patient.source==='kinvent'?'Kinvent':test.source==='fd'?'VALD ForceDecks':'VALD DynaMo';
@@ -180,11 +181,21 @@ function writeMetricSlot(row,slot,values,response,date) {
  row[initial?'initialTest':'controlTest']=response.test;
  row[initial?'initialRecordedAt':'controlRecordedAt']=response.date||'';
 }
+function autoJoinImportedRow(index,patient){
+ const row=data.rows[index];
+ if(!row.importKey||!['left','right'].includes(row.importKey.split('|').at(-1)))return;
+ const prefix=patient.source+'|'+patient.id+'|';
+ const matches=(candidate)=>data.rows.flatMap((other,i)=>other.importKey?.startsWith(prefix)&&
+  pairedRows(candidate,other)?[i]:[]);
+ const candidates=matches(row);
+ if(candidates.length===1&&matches(data.rows[candidates[0]]).length===1)joinSides(index,candidates[0],true);
+}
 function saveMetricRow(row,patient) {
  row.origin='Paciente '+patient.name+' · Inicial: '+(row.initialTest||'sin cargar')+' · Control: '+(row.controlTest||'sin cargar');
  row.reviewed=false;
  const index=row.importKey?data.rows.findIndex(x=>x.importKey===row.importKey):-1;
  if(index<0)data.rows.push(row);else data.rows[index]=row;
+ autoJoinImportedRow(index<0?data.rows.length-1:index,patient);
  editors();
  report();
 }
@@ -198,6 +209,12 @@ function importMetric(metric,values,slot,label,method,response,patient,test) {
  const row=metricRow(metric,values,method,patient,test,label);
  const initial=slot==='initial';
  if(row[initial?'controlTest':'initialTest']===response.test)throw Error('Elige otra evaluación para la segunda columna.');
+ const testField=initial?'initialTest':'controlTest';
+ if(row.importKey&&data.rows.some(existing=>String(existing.pairedImportKeys||'').split('\n').includes(row.importKey)&&
+  String(existing[testField]||'').split(' / ').includes(String(response.test)))){
+  msg('Esta evaluación ya está incluida en la fila bilateral.');
+  return false;
+ }
  const keys=initial?['li','ri','initial']:['lc','rc','current'];
  if(keys.some(key=>number(row[key])!==null)&&!confirm('Esta columna ya tiene datos. ¿Reemplazarlos?'))return false;
  writeMetricSlot(row,slot,values,response,date);

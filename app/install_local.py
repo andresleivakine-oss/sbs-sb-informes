@@ -20,7 +20,7 @@ def validate_zip(path):
  if set(out)!=set(FILES):raise ValueError('Faltan archivos de la aplicación. Usa el paquete completo.')
  return out
 
-VERSION='0.5.24'
+VERSION='0.5.25'
 UPDATE_ROOT='https://raw.githubusercontent.com/andresleivakine-oss/sbs-sb-informes/main/'
 
 def version_tuple(value):

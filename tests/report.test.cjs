@@ -106,3 +106,23 @@ assert.match(reopened, /status-tag green/);
 assert.doesNotMatch(reopened, /invalid\.example|descartar@example/);
 assert.throws(() => vm.runInContext('savedReportState("<html>Otro archivo</html>")', context), /HTML editable/);
 assert.throws(() => vm.runInContext('savedReportState(savedHtml.replace(\'"SB"\', \'"Otro"\'))', context), /formato incompatible/);
+
+vm.runInContext(`
+ const leftTest={group:'force',format:'sides',name:'Extensión rodilla',protocol:'Kinvent · sentado izquierda',
+   unit:'kgf',li:30,initialDate:'12-11-2026',initialTest:'left-test',importKey:'kinvent|p1|metric|max|left'};
+ const rightTest={...leftTest,protocol:'Kinvent · sentado derecha',li:'',ri:28,
+   initialTest:'right-test',importKey:'kinvent|p1|metric|max|right'};
+ data.rows=[leftTest,rightTest];
+`,context);
+assert.equal(vm.runInContext('joinedRow(pairedRows(leftTest,rightTest)).ri',context),28);
+assert.equal(vm.runInContext("pairedRows(leftTest,{...rightTest,initialDate:'13-11-2026'})",context),null);
+assert.equal(vm.runInContext("pairedRows(leftTest,{...rightTest,protocol:'Kinvent · de pie'})",context),null);
+assert.equal(vm.runInContext("pairedRows(leftTest,{...rightTest,importKey:'kinvent|p2|metric|max|right'})",context),null);
+const autoJoin=connector.slice(connector.indexOf('function autoJoinImportedRow'),connector.indexOf('function saveMetricRow'));
+vm.runInContext(autoJoin,context);
+vm.runInContext("autoJoinImportedRow(1,{source:'kinvent',id:'p1'})",context);
+assert.equal(vm.runInContext('data.rows.length',context),1);
+assert.equal(vm.runInContext('data.rows[0].li',context),30);
+assert.equal(vm.runInContext('data.rows[0].ri',context),28);
+vm.runInContext("data.rows=[leftTest,{...leftTest,initialTest:'another-left'},rightTest]; autoJoinImportedRow(2,{source:'kinvent',id:'p1'})",context);
+assert.equal(vm.runInContext('data.rows.length',context),3);
