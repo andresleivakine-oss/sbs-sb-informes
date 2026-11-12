@@ -126,3 +126,28 @@ assert.equal(vm.runInContext('data.rows[0].li',context),30);
 assert.equal(vm.runInContext('data.rows[0].ri',context),28);
 vm.runInContext("data.rows=[leftTest,{...leftTest,initialTest:'another-left'},rightTest]; autoJoinImportedRow(2,{source:'kinvent',id:'p1'})",context);
 assert.equal(vm.runInContext('data.rows.length',context),3);
+
+const dynamoHelpers=connector.slice(connector.indexOf('function dynamoLateralResponse'),connector.indexOf('async function applyComparison'));
+vm.runInContext(connector.slice(connector.indexOf('function evaluationDate'),connector.indexOf('function importMetric')),context);
+vm.runInContext(dynamoHelpers,context);
+vm.runInContext(`
+ const dynTest={source:'dyn',kind:'rom'};
+ function dynRecord(side,date,value,protocol='Sentado'){
+  const response=dynamoLateralResponse(dynTest,{test:side+date,date,metrics:[{
+   name:'Tronco · Rotación '+side,group:'rom',unit:'°',protocol,method:'Resumen',
+   fingerprint:side,values:{value}
+  }]});
+  return {test:dynTest,response};
+ }
+ const dl=dynRecord('izquierda','2026-11-10T21:04:00Z',93.94);
+ const dr=dynRecord('derecha','2026-11-10T21:05:00Z',89.65);
+ const dl2=dynRecord('izquierda','2026-11-11T21:04:00Z',95);
+ const dr2=dynRecord('derecha','2026-11-11T21:05:00Z',93);
+ const dm=dl.response.metrics[0];
+ const sessions=linkedDynamoSessions(dm,dynTest,dl.response,[dr,dl2,dr2]);
+`,context);
+assert.equal(vm.runInContext('sessions.length',context),2);
+assert.equal(vm.runInContext('sessions[0].metric.values.left',context),93.94);
+assert.equal(vm.runInContext('sessions[0].metric.values.right',context),89.65);
+assert.equal(vm.runInContext("linkedDynamoSessions(dm,dynTest,dl.response,[dynRecord('derecha','2026-11-10T21:05:00Z',89.65,'De pie')]).length",context),0);
+assert.equal(vm.runInContext("linkedDynamoSessions(dm,dynTest,dl.response,[dr,dynRecord('derecha','2026-11-10T21:06:00Z',90)]).length",context),0);

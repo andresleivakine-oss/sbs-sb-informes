@@ -137,7 +137,7 @@ async function loadTests(more=false) {
 $('apiTests').onclick=()=>runApi(startTests);
 $('apiMore').onclick=()=>{$('apiMetrics').replaceChildren();runApi(()=>loadTests(true))};
 function aggregate(m,how){if(!m.samples)return {...m.values};let vals={};for(const [limb,samples] of Object.entries(m.samples)){let n=samples.filter(x=>typeof x==='number'&&Number.isFinite(x));if(!n.length)continue;let side=limb.toLowerCase().includes('left')?'left':limb.toLowerCase().includes('right')?'right':'value';let v=how==='mean'?n.reduce((a,b)=>a+b,0)/n.length:how==='max'?Math.max(...n):n[+how];if(v===undefined)continue;if(vals[side]!==undefined)throw Error('Varios tipos de lado corresponden a la misma métrica. Selecciona otra métrica o registra manualmente.');vals[side]=v}return vals}
-async function loadMetrics(t){const patientAtRequest=selectedPatient.id,version=++requestVersion;let d=await callApi('metrics',{key:t.key,patient:patientAtRequest});if(!selectedPatient||selectedPatient.id!==patientAtRequest||version!==requestVersion)return;$('apiMetrics').replaceChildren();const comparisons=loadComparisonCandidates(t,patientAtRequest,version);let heading=document.createElement('h3');heading.style.fontSize='14px';heading.textContent=t.title;$('apiMetrics').append(heading);const metrics=d.metrics||[];
+async function loadMetrics(t){const patientAtRequest=selectedPatient.id,version=++requestVersion;let d=dynamoLateralResponse(t,await callApi('metrics',{key:t.key,patient:patientAtRequest}));if(!selectedPatient||selectedPatient.id!==patientAtRequest||version!==requestVersion)return;$('apiMetrics').replaceChildren();const comparisons=loadComparisonCandidates(t,patientAtRequest,version);let heading=document.createElement('h3');heading.style.fontSize='14px';heading.textContent=t.title;$('apiMetrics').append(heading);const metrics=d.metrics||[];
 const metricHost=document.createElement('div');
 const jumps=metrics.filter(m=>m.group==='biomech');
 if(jumps.length){
@@ -182,13 +182,31 @@ let values=document.createElement('p');values.className='hint';const show=()=>{t
   controls.append(button);
   return {button,mode};
  });
+ const linkedButtons=[['initial','Vincular Izq. y Der. como inicial'],['control','Vincular Izq. y Der. como control']].map(([slot,caption])=>{
+  const button=document.createElement('button');
+  button.textContent=caption;button.hidden=true;controls.append(button);
+  return {button,slot};
+ });
  const refresh=results=>{
-  const pairs=buttons.map(({mode})=>comparisonPair(m,method.value,t,d,results,mode));
+  const linked=linkedDynamoSessions(m,t,d,results);
+  const selected=linked.find(record=>record.response.test.split(' / ').includes(d.test));
+  for(const {button,slot} of linkedButtons){
+   button.hidden=!selected;
+   button.onclick=()=>{if(version===requestVersion&&selected)runApi(()=>{
+    if(importMetric(selected.metric,selected.metric.values,slot,selected.metric.name,'summary',selected.response,selectedPatient,t))
+     msg('Izquierda y derecha vinculadas en una fila bilateral.');
+   });};
+  }
+  if(selected){const {left,right}=selected.metric.values;values.textContent='Izq.: '+fmt(left)+' '+m.unit+' · Der.: '+fmt(right)+' '+m.unit;}
+  const comparisonMetric=selected?.metric||m;
+  const comparisonResponse=selected?.response||d;
+  const comparisonResults=selected?linked.filter(record=>record!==selected):results;
+  const pairs=buttons.map(({mode})=>comparisonPair(comparisonMetric,method.value,t,comparisonResponse,comparisonResults,mode));
   buttons.forEach(({button,mode},i)=>{
    button.hidden=!pairs[i];
-   button.onclick=()=>{if(version===requestVersion&&pairs[i])runApi(()=>applyComparison(m,method.value,name.value,t,pairs[i],mode));};
+   button.onclick=()=>{if(version===requestVersion&&pairs[i])runApi(()=>applyComparison(comparisonMetric,method.value,selected?comparisonMetric.name:name.value,t,pairs[i],mode));};
   });
-  hint.textContent=pairs.some(Boolean)?'Hay dos o más evaluaciones compatibles en el historial cargado.':'Sin dos evaluaciones compatibles en el historial cargado. Puedes ampliar las fechas o usar Cargar más.';
+  hint.textContent=pairs.some(Boolean)?'Hay dos o más evaluaciones compatibles en el historial cargado.':selected?'Hay un par de izquierda y derecha de la misma fecha.':'Sin dos evaluaciones compatibles en el historial cargado. Puedes ampliar las fechas o usar Cargar más.';
  };
  comparisons.then(results=>{
   if(version!==requestVersion)return;
@@ -268,13 +286,52 @@ function importMetric(metric,values,slot,label,method,response,patient,test) {
  saveMetricRow(row,patient);
  return true;
 }
+function dynamoLateralResponse(test,response){
+ if(test.source!=='dyn')return response;
+ return {...response,metrics:(response.metrics||[]).map(metric=>{
+  const label=sideLabel(metric.name);
+  if(!label)return metric;
+  const values=metric.values||{};
+  const keys=Object.keys(values);
+  if(keys.length!==1||!['value',label.side].includes(keys[0])||!Number.isFinite(values[keys[0]]))return metric;
+  return {...metric,values:{[label.side]:values[keys[0]]},dynamoSide:label.side,dynamoName:label.name};
+ })};
+}
+function linkedDynamoSessions(metric,test,response,results){
+ if(test.source!=='dyn'||!metric.dynamoSide)return [];
+ const sessions=new Map();
+ for(const record of [{test,response},...results]){
+  const date=evaluationDate(record.response.date);
+  if(!date)continue;
+  for(const other of record.response.metrics||[]){
+   if(!other.dynamoSide||other.unit!==metric.unit||other.group!==metric.group||
+    other.protocol!==metric.protocol||other.method!==metric.method||pairText(other.dynamoName)!==pairText(metric.dynamoName))continue;
+   if(!sessions.has(date))sessions.set(date,{left:[],right:[]});
+   sessions.get(date)[other.dynamoSide].push({metric:other,response:record.response});
+  }
+ }
+ const linked=[];
+ for(const {left,right} of sessions.values()){
+  if(left.length!==1||right.length!==1||left[0].response.test===right[0].response.test)continue;
+  const a=left[0],b=right[0];
+  const setup=['attachments','leftAttachment','rightAttachment'];
+  if(setup.some(key=>a.metric.attachments?.[key]&&b.metric.attachments?.[key]&&
+   a.metric.attachments[key]!==b.metric.attachments[key]))continue;
+  const fingerprint=['DynaMo bilateral',a.metric.fingerprint,b.metric.fingerprint].join(':');
+  const combined={...a.metric,name:metric.dynamoName,fingerprint,comparisonProtocol:null,values:{left:a.metric.values.left,right:b.metric.values.right}};
+  const date=[a.response.date,b.response.date].sort()[0];
+  linked.push({test,response:{test:[a.response.test,b.response.test].sort().join(' / '),date,metrics:[combined]},metric:combined});
+ }
+ return linked;
+}
 async function loadComparisonCandidates(test,patient,version) {
  const results=[];
- const candidates=loadedTests.filter(other=>other.key!==test.key&&other.source===test.source&&other.title===test.title&&evaluationDate(other.date));
+ const candidates=loadedTests.filter(other=>other.key!==test.key&&other.source===test.source&&evaluationDate(other.date)&&(other.title===test.title||
+  test.source==='dyn'&&other.kind===test.kind&&pairText(other.title)===pairText(test.title)));
  for(const other of candidates){
   if(requestVersion!==version)return [];
   try{
-   const response=await callApi('metrics',{key:other.key,patient});
+   const response=dynamoLateralResponse(other,await callApi('metrics',{key:other.key,patient}));
    results.push({response,test:other});
   }catch(error){continue;}
  }
