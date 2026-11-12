@@ -218,13 +218,25 @@ def search(d):
  if len(q)<2:raise UserError('Escribe al menos dos letras del nombre.')
  if d.get('source')=='vald':
   ps=profiles();return {'patients':[p for p in ps if all(x in normal(p['name']) for x in normal(q).split())][:50]}
- raw=kin('/api/participants/v2/paginated',{'isAthlete':bool(d.get('athlete',False)),'page':max(0,int(d.get('page',0))),'query':q[:120],'size':20,'tags':[]})
- out=[]
- for p in coll(raw,['content','participants','items','data','results']):
-  if not isinstance(p,dict):continue
-  code=p.get('code') or p.get('participantCode');name=p.get('fullName') or ' '.join(str(p.get(k) or '') for k in ['firstName','lastName']).strip() or ' '.join(str(p.get(k) or '') for k in ['givenName','familyName']).strip() or p.get('name')
-  if code and name:out.append({'id':code,'name':name,'birth':birthdate(p.get('dateOfBirth') or p.get('birthDate')),'source':'kinvent'})
- return {'patients':out,'page':max(0,int(d.get('page',0))),'note':'Búsqueda de 20 perfiles por página.'}
+ page=max(0,int(d.get('page',0)))
+ preferred=bool(d.get('athlete',False))
+ profile_type=d.get('profileType')
+ scopes=[profile_type=='athlete'] if profile_type in ('patient','athlete') else [preferred,not preferred]
+ for athlete in scopes:
+  raw=kin('/api/participants/v2/paginated',{'isAthlete':athlete,'page':page,'query':q[:120],'size':20,'tags':[]})
+  out=[]
+  items=coll(raw,['content','participants','items','data','results'])
+  for p in items:
+   if not isinstance(p,dict):continue
+   code=p.get('code') or p.get('participantCode')
+   name=p.get('fullName') or ' '.join(str(p.get(k) or '') for k in ['firstName','lastName']).strip() or ' '.join(str(p.get(k) or '') for k in ['givenName','familyName']).strip() or p.get('name')
+   if code and name:out.append({'id':code,'name':name,'birth':birthdate(p.get('dateOfBirth') or p.get('birthDate')),'source':'kinvent'})
+  if items and not out:raise UserError('Kinvent devolvió perfiles sin identificador o nombre reconocido.')
+  if out or len(scopes)==1:
+   total=raw.get('totalPages') if isinstance(raw,dict) else None
+   more=page+1<total if isinstance(total,int) else len(items)>=20
+   return {'patients':out,'page':page,'profileType':'athlete' if athlete else 'patient','hasMore':more}
+ return {'patients':[],'page':page,'hasMore':False}
 
 def list_tests(d):
  source=d.get('source');pid=ident(d.get('patient'));start=utc(d.get('start'));end=utc(d.get('end'),True)
@@ -444,7 +456,7 @@ class Handler(SimpleHTTPRequestHandler):
 
 def main():
  global CID,SECRET,KINVENT,TENANT,TOKEN,SAVED,STORAGE_WARNING
- print('SBS / SB · Aplicación local 0.5.25 · Solo lectura.\nConfigura ambos proveedores desde Conexiones en la pantalla.\n')
+ print('SBS / SB · Aplicación local 0.5.26 · Solo lectura.\nConfigura ambos proveedores desde Conexiones en la pantalla.\n')
  if win_secrets.supported():
   try:SAVED=win_secrets.load()
   except Exception:STORAGE_WARNING='No se pudo recuperar la configuración protegida. Vuelve a configurar las conexiones.'

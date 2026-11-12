@@ -5,7 +5,48 @@ async function callApi(path,body={}){if(!apiSession){const s=await fetch('/api/s
 async function runApi(fn){try{msg('Consultando…');await fn()}catch(e){msg(e.name==='TimeoutError'?'La consulta tardó más de 60 segundos. Inténtalo de nuevo.':e.message||'No se pudo conectar con el servicio local. Abre INICIAR.bat.')}}
 function source(){return $('apiSource').value}
 function clearClinical(){data.rows=[];data.patient='';data.diagnosis='';data.doctor='';data.initialDate='';data.controlDate='';data.suggestions='';data.clinicalReason='';data.clinicalFindings='';data.clinicalNextStep='';data.draft=false;editors();report()}
-async function findPatients(){if(!configuration[source()])throw Error(source()==='vald'?'Abre Conexiones y configura VALD. No hace falta cerrar ni reiniciar.':'Abre Conexiones y configura Kinvent. No hace falta cerrar ni reiniciar.');const version=++requestVersion;const d=await callApi('search',{source:source(),query:$('apiQuery').value,page:searchPage,refresh:true,athlete:$('apiAthlete').checked});if(version!==requestVersion)return;$('apiPatients').replaceChildren();for(let p of d.patients||[]){let b=document.createElement('button');b.style.cssText='display:block;width:100%;text-align:left;margin:7px 0';b.textContent=p.name+(p.birth?' · '+p.birth:'')+' · '+String(p.id).slice(-6);b.onclick=()=>runApi(()=>selectPatient(p));$('apiPatients').append(b)}msg(d.patients?.length?'Selecciona al paciente correcto antes de consultar evaluaciones.':(searchPage?'Sin resultados en esta página.':'No se encontraron perfiles. En Kinvent prueba también la opción Perfil deportista.'))}
+let searchVersion=0,searchProfileType=null,searchHasMore=false;
+function resetPatientSearch(){
+ searchVersion++;
+ searchPage=0;
+ searchProfileType=null;
+ searchHasMore=false;
+ $('apiPatients').replaceChildren();
+ $('apiPrev').disabled=true;
+ $('apiNext').disabled=true;
+}
+async function findPatients(){
+ const provider=source();
+ if(!configuration[provider])throw Error('Abre Conexiones y configura '+(provider==='vald'?'VALD':'Kinvent')+'. No hace falta cerrar ni reiniciar.');
+ const version=++searchVersion;
+ const page=searchPage;
+ const query=$('apiQuery').value;
+ $('apiPatients').replaceChildren();
+ $('apiPrev').disabled=true;
+ $('apiNext').disabled=true;
+ let result;
+ try{
+  result=await callApi('search',{source:provider,query,page,refresh:true,athlete:$('apiAthlete').checked,profileType:searchProfileType});
+ }catch(error){
+  if(version===searchVersion)throw error;
+  return;
+ }
+ if(version!==searchVersion)return;
+ searchProfileType=result.profileType||null;
+ searchHasMore=Boolean(result.hasMore);
+ $('apiPrev').disabled=page===0;
+ $('apiNext').disabled=!searchHasMore;
+ for(const p of result.patients||[]){
+  const button=document.createElement('button');
+  button.style.cssText='display:block;width:100%;text-align:left;margin:7px 0';
+  button.textContent=p.name+(p.birth?' · '+p.birth:'')+' · '+String(p.id).slice(-6);
+  button.onclick=()=>runApi(()=>selectPatient(p));
+  $('apiPatients').append(button);
+ }
+ const message=result.patients?.length?'Selecciona el perfil correcto para cargar evaluaciones.':
+  page?'Sin resultados en esta página.':provider==='kinvent'?'Sin coincidencias en pacientes ni deportistas. Prueba con un apellido.':'No se encontraron perfiles.';
+ msg(message);
+}
 
 function syncSource(){
  const isVald=source()==='vald';
@@ -34,8 +75,13 @@ async function startTests(){
  try{await loadTests(false)}catch(e){$('apiHistoryNote').textContent='La consulta de evaluaciones no se completó. '+e.message;throw e;}
 }
 
-$('apiSearch').onclick=()=>{searchPage=0;runApi(findPatients)};$('apiQuery').onkeydown=e=>{if(e.key==='Enter')$('apiSearch').click()};$('apiNext').onclick=()=>{if(source()!=='kinvent')return msg('VALD busca en el listado completo de perfiles.');searchPage++;runApi(findPatients)};$('apiPrev').onclick=()=>{searchPage=Math.max(0,searchPage-1);runApi(findPatients)};
-$('apiSource').onchange=()=>{requestVersion++;selectedPatient=null;searchPage=0;$('apiPatients').replaceChildren();$('apiHistory').hidden=true;$('apiMetrics').replaceChildren();syncSource();msg('Busca un paciente en la fuente elegida. El informe actual se conserva hasta seleccionar otro paciente.')};
+$('apiSearch').onclick=()=>{resetPatientSearch();runApi(findPatients)};
+$('apiQuery').onkeydown=event=>{if(event.key==='Enter')$('apiSearch').click()};
+$('apiQuery').addEventListener('input',resetPatientSearch);
+$('apiAthlete').onchange=resetPatientSearch;
+$('apiNext').onclick=()=>{if(source()!=='kinvent'||!searchHasMore)return;searchPage++;runApi(findPatients)};
+$('apiPrev').onclick=()=>{if(source()!=='kinvent'||searchPage===0)return;searchPage--;runApi(findPatients)};
+$('apiSource').onchange=()=>{requestVersion++;selectedPatient=null;resetPatientSearch();$('apiHistory').hidden=true;$('apiMetrics').replaceChildren();syncSource();msg('Busca un paciente en la fuente elegida. El informe actual se conserva hasta seleccionar otro paciente.')};
 function chileDayBoundary(day,end=false){
  const match=/^(\d{4})-(\d{2})-(\d{2})$/.exec(day);
  if(!match)throw Error('Selecciona fechas válidas.');
@@ -302,7 +348,7 @@ function renderTests(){
 }
 for(const id of ['filterKind','filterRegion','filterName'])$(id).oninput=renderTests;
 $('configProvider').onchange=()=>{const v=$('configProvider').value==='vald';$('valdConfigFields').hidden=!v;$('kinventConfigFields').hidden=v;$('configMessage').textContent='';};
-function resetApiViews(){selectedPatient=null;loadedTests=[];seenTests=new Set();$('apiHistory').hidden=true;$('apiPatients').replaceChildren();$('apiTestList').replaceChildren();$('apiMetrics').replaceChildren();}
+function resetApiViews(){resetPatientSearch();selectedPatient=null;loadedTests=[];seenTests=new Set();$('apiHistory').hidden=true;$('apiPatients').replaceChildren();$('apiTestList').replaceChildren();$('apiMetrics').replaceChildren();}
 document.addEventListener('saved-report-opened',()=>{
  requestVersion++;
  resetApiViews();
