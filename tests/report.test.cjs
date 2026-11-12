@@ -164,3 +164,19 @@ const imageReport=nodes.get('report').innerHTML;
 assert.match(imageReport, /class="test-image" src="data:image\/png;base64,AAAA"/);
 assert.doesNotMatch(imageReport, /invalid\.example|class="asym /);
 assert.match(nodes.get('forceedit').innerHTML,/Imagen de la prueba/);
+
+vm.runInContext(connector.slice(connector.indexOf('function aggregate('),connector.indexOf('async function loadMetrics')),context);
+vm.runInContext(connector.slice(connector.indexOf('function metricShape('),connector.indexOf('function metricRow')),context);
+vm.runInContext(`
+ const shoulderMetric={fingerprint:'shoulder',unit:'°',group:'rom',values:{left:178.92,right:101.83}};
+ const shoulderTest={source:'dyn'};
+ const sameDay={test:'same-day',date:'2026-09-30T20:00:00Z',metrics:[shoulderMetric]};
+ const previousDay={test:'previous-day',date:'2026-09-29T20:00:00Z',metrics:[shoulderMetric]};
+ const selectedDay={test:'selected-day',date:'2026-09-30T21:00:00Z'};
+ data.rows=[{name:'Hombro · Flexión',group:'rom',unit:'°',format:'sides',li:420.84,ri:103.21,lc:178.92,rc:101.83}];
+ report();
+`,context);
+assert.equal(vm.runInContext("comparisonPair(shoulderMetric,'summary',shoulderTest,selectedDay,[{response:sameDay}],'firstLast')",context),null);
+assert.equal(vm.runInContext("comparisonPair(shoulderMetric,'summary',shoulderTest,selectedDay,[{response:sameDay},{response:previousDay}],'latest').a.response.test",context),'previous-day');
+assert.match(nodes.get('report').innerHTML,/Revisar medición/);
+assert.match(nodes.get('report').innerHTML,/class="quantity">317,63 °/);

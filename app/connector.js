@@ -206,7 +206,7 @@ let values=document.createElement('p');values.className='hint';const show=()=>{t
    button.hidden=!pairs[i];
    button.onclick=()=>{if(version===requestVersion&&pairs[i])runApi(()=>applyComparison(comparisonMetric,method.value,selected?comparisonMetric.name:name.value,t,pairs[i],mode));};
   });
-  hint.textContent=pairs.some(Boolean)?'Hay dos o más evaluaciones compatibles en el historial cargado.':selected?'Hay un par de izquierda y derecha de la misma fecha.':'Sin dos evaluaciones compatibles en el historial cargado. Puedes ampliar las fechas o usar Cargar más.';
+  hint.textContent=pairs.some(Boolean)?'Hay dos o más evaluaciones compatibles en el historial cargado.':selected?'Hay un par de izquierda y derecha de la misma fecha.':'La comparación automática necesita evaluaciones compatibles en dos fechas distintas.';
  };
  comparisons.then(results=>{
   if(version!==requestVersion)return;
@@ -370,7 +370,7 @@ function comparisonPair(metric,method,test,response,results,mode) {
  for(let last=ordered.length-1;last>0;last--){
   for(let first=mode==='latest'?last-1:0;first>=0&&first<last;first+=mode==='latest'?-1:1){
    const a=ordered[first],b=ordered[last];
-   if(a.response.test===b.response.test||Date.parse(a.response.date)===Date.parse(b.response.date))continue;
+   if(a.response.test===b.response.test||evaluationDate(a.response.date)===evaluationDate(b.response.date))continue;
    const unknown=attachmentCompatibility(a.metric,b.metric);
    if(unknown!==null)return {a,b,unknown};
   }
