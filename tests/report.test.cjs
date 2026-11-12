@@ -51,12 +51,13 @@ const columnGroups = [...report.matchAll(/<colgroup>.*?<\/colgroup>/g)].map(matc
 assert.equal(columnGroups.length, 4);
 assert.equal(new Set(columnGroups).size, 1);
 assert.match(report, /Evaluado con equipos VALD y Kinvent/);
+assert.match(report, /<ul class="report-notes"><li><b>Asimetría bilateral<\/b>/);
 assert.match(report, /KOOS · Subescala de síntomas/);
 assert.doesNotMatch(report, /VALD ForceDecks · máximo|Protocolo editable/);
 assert.equal([...report.matchAll(/Dolor, síntomas, función y calidad de vida relacionados con la rodilla/g)].length, 1);
 assert.match(report, /Cambio global percibido por el paciente desde el inicio/);
 assert.doesNotMatch(report, /Tamizaje de siete patrones/);
-assert.equal(vm.runInContext("reportNotes([{group:'force', protocol:'Medición manual'}])", context), '');
+assert.equal(vm.runInContext("reportNotes([{group:'force', format:'single', protocol:'Medición manual'}])", context), '');
 assert.match(vm.runInContext("reportNotes([{group:'force', equipment:'Kinvent'}])", context), /equipos Kinvent\./);
 assert.doesNotMatch(report, /No es necesario reevaluar la asimetría/);
 assert.match(report, /class="outcome"><strong class="status-tag green">✓ Logrado<\/strong><small>Asimetría inicial 10 %/);
