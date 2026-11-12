@@ -285,16 +285,61 @@ def list_tests(d):
 def dynamo_metrics(t):
  category=t.get('testCategory');field='maxRangeOfMotionDegrees' if category=='RangeofMotion' else 'maxForceNewtons' if category=='Strength' else None
  if not field:return []
- sides={};unit='°' if category=='RangeofMotion' else 'N';group='rom' if category=='RangeofMotion' else 'force'
- for s in t.get('repetitionTypeSummaries',[]):
-  v=s.get(field);side={'LeftSide':'left','RightSide':'right','BothSides':'value','None':'value'}.get(s.get('laterality'))
-  if side and finite(v):sides[side]=v
- if not sides:return []
+ unit='°' if category=='RangeofMotion' else 'N'
+ group='rom' if category=='RangeofMotion' else 'force'
+ test_movement=str(t.get('movement') or '').strip()
+ combined_rotation='internalrotationexternalrotation' in ''.join(c for c in test_movement.lower() if c.isalpha())
  protocol={k:t.get(k) for k in ['testCategory','bodyRegion','movement','position','customPosition','attachments','leftAttachment','rightAttachment']}
  setup={key:protocol[key] for key in ('attachments','leftAttachment','rightAttachment')}
  core={key:protocol[key] for key in ('testCategory','bodyRegion','movement','position','customPosition')}
- name=' · '.join(str(t.get(k) or '') for k in ['bodyRegion','movement']).strip(' ·')
- return [{'id':field,'name':spanish_label(name),'unit':unit,'group':group,'values':sides,'method':'Máximo por lado · resúmenes DynaMo','protocol':spanish_label(' · '.join(str(t.get(k) or '') for k in ['position','customPosition']).strip(' ·')),'fingerprint':fingerprint(['DynaMo',protocol,field,unit]),'comparisonProtocol':fingerprint(['DynaMo',core,field,unit]),'attachments':setup,'kpi':'Fuerza máxima en la posición evaluada.' if group=='force' else 'Amplitud de movimiento; conservar signo y posición del protocolo.'}]
+ position=spanish_label(' · '.join(str(t.get(k) or '') for k in ['position','customPosition']).strip(' ·'))
+ def movement_name(value):
+  return spanish_label(' · '.join(filter(None,[str(t.get('bodyRegion') or ''),value])))
+ def build(metric_id,name,parameter,values,metric_unit,method,kpi,discriminator=None):
+  suffix=[] if discriminator is None else [discriminator]
+  return {'id':metric_id,'name':name,'parameterName':parameter,'unit':metric_unit,'group':group,'values':values,
+   'method':method,'protocol':position,'fingerprint':fingerprint(['DynaMo',protocol,metric_id,metric_unit,*suffix]),
+   'comparisonProtocol':fingerprint(['DynaMo',core,metric_id,metric_unit,*suffix]),'attachments':setup,'kpi':kpi}
+ lateral={'LeftSide':'left','RightSide':'right','Left':'left','Right':'right','BothSides':'value','None':'value'}
+ summaries={}
+ for entry in t.get('repetitionTypeSummaries') or []:
+  if not isinstance(entry,dict):continue
+  movement=str(entry.get('movement') or '').strip() or test_movement
+  if not combined_rotation and ''.join(c for c in test_movement.lower() if c.isalpha()).endswith(('left','right')):movement=test_movement
+  if combined_rotation and ''.join(c for c in movement.lower() if c.isalpha()) not in ('internalrotation','externalrotation'):continue
+  side=lateral.get(entry.get('laterality'))
+  value=entry.get(field)
+  if not side or not finite(value):continue
+  values=summaries.setdefault(movement,{})
+  values[side]=max(values.get(side,value),value)
+ output=[]
+ for movement,values in summaries.items():
+  if 'value' in values and len(values)>1:values.pop('value')
+  name=movement_name(movement)
+  if normal(t.get('bodyRegion')) in ('shoulder','hombro') and position and ''.join(c for c in movement.lower() if c.isalpha()) in ('internalrotation','externalrotation'):
+   name+=' · '+position
+  output.append(build(field,name,('Fuerza máxima' if group=='force' else 'Movilidad máxima')+' · '+spanish_label(movement),
+   values,unit,'Máximo por lado · resúmenes DynaMo',
+   'Fuerza máxima en la posición evaluada.' if group=='force' else 'Amplitud de movimiento; conservar signo y posición del protocolo.',
+   None if movement==test_movement else movement))
+ ratios={}
+ for entry in t.get('ratios') or []:
+  if not isinstance(entry,dict):continue
+  numerator=entry.get('numeratorMovement')
+  denominator=entry.get('denominatorMovement')
+  side=lateral.get(entry.get('laterality'))
+  value=entry.get('value')
+  if not all(isinstance(part,str) and part.strip() for part in (numerator,denominator)) or side not in ('left','right') or not finite(value):continue
+  values=ratios.setdefault((numerator,denominator),{})
+  if side not in values:values[side]=value
+  elif values[side]!=value:values[side]=None
+ for (numerator,denominator),values in ratios.items():
+  values={side:value for side,value in values.items() if value is not None}
+  if not values:continue
+  label='Ratio '+spanish_label(numerator)+' / '+spanish_label(denominator)
+  output.append(build('ratio',' · '.join(filter(None,[movement_name(label),position])),label,values,'ratio','Ratio por lado · DynaMo',
+   'Ratio informado por VALD, en el orden indicado.',[numerator,denominator]))
+ return output
 
 def force_metrics(trials,meta):
  test_type=meta.get('testType') or ''
@@ -456,7 +501,7 @@ class Handler(SimpleHTTPRequestHandler):
 
 def main():
  global CID,SECRET,KINVENT,TENANT,TOKEN,SAVED,STORAGE_WARNING
- print('SBS / SB · Aplicación local 0.5.27 · Solo lectura.\nConfigura ambos proveedores desde Conexiones en la pantalla.\n')
+ print('SBS / SB · Aplicación local 0.5.28 · Solo lectura.\nConfigura ambos proveedores desde Conexiones en la pantalla.\n')
  if win_secrets.supported():
   try:SAVED=win_secrets.load()
   except Exception:STORAGE_WARNING='No se pudo recuperar la configuración protegida. Vuelve a configurar las conexiones.'

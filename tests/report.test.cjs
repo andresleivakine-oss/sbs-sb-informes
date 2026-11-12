@@ -151,3 +151,16 @@ assert.equal(vm.runInContext('sessions[0].metric.values.left',context),93.94);
 assert.equal(vm.runInContext('sessions[0].metric.values.right',context),89.65);
 assert.equal(vm.runInContext("linkedDynamoSessions(dm,dynTest,dl.response,[dynRecord('derecha','2026-11-10T21:05:00Z',89.65,'De pie')]).length",context),0);
 assert.equal(vm.runInContext("linkedDynamoSessions(dm,dynTest,dl.response,[dr,dynRecord('derecha','2026-11-10T21:06:00Z',90)]).length",context),0);
+
+vm.runInContext(`
+ data.rows=[
+  {group:'force',format:'sides',name:'Ratio de prueba',unit:'ratio',mode:'auto',li:1.26,ri:1.66,image:'data:image/png;base64,AAAA'},
+  {group:'rom',name:'Imagen inválida',image:'https://invalid.example/test.png'}
+ ];
+ report();
+ editors();
+`,context);
+const imageReport=nodes.get('report').innerHTML;
+assert.match(imageReport, /class="test-image" src="data:image\/png;base64,AAAA"/);
+assert.doesNotMatch(imageReport, /invalid\.example|class="asym /);
+assert.match(nodes.get('forceedit').innerHTML,/Imagen de la prueba/);

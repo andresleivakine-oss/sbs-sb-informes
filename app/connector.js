@@ -140,12 +140,12 @@ function aggregate(m,how){if(!m.samples)return {...m.values};let vals={};for(con
 async function loadMetrics(t){const patientAtRequest=selectedPatient.id,version=++requestVersion;let d=dynamoLateralResponse(t,await callApi('metrics',{key:t.key,patient:patientAtRequest}));if(!selectedPatient||selectedPatient.id!==patientAtRequest||version!==requestVersion)return;$('apiMetrics').replaceChildren();const comparisons=loadComparisonCandidates(t,patientAtRequest,version);let heading=document.createElement('h3');heading.style.fontSize='14px';heading.textContent=t.title;$('apiMetrics').append(heading);const metrics=d.metrics||[];
 const metricHost=document.createElement('div');
 const jumps=metrics.filter(m=>m.group==='biomech');
-if(jumps.length){
+if(metrics.length>1||jumps.length){
  const label=document.createElement('label');
- label.textContent='Parámetro del salto';
+ label.textContent=jumps.length?'Parámetro del salto':'Parámetro de la prueba';
  const chooser=document.createElement('select');
- const ordered=[...jumps].sort((a,b)=>Number(b.preferred)-Number(a.preferred)||Number(b.direction==='higher')-Number(a.direction==='higher'));
- const hasDefault=ordered[0].preferred||ordered[0].direction==='higher';
+ const ordered=[...metrics].sort((a,b)=>Number(b.preferred)-Number(a.preferred)||Number(b.direction==='higher')-Number(a.direction==='higher'));
+ const hasDefault=Boolean(jumps.length&&(ordered[0].preferred||ordered[0].direction==='higher'));
  if(!hasDefault){
   const placeholder=document.createElement('option');
   placeholder.textContent='Elige un parámetro';placeholder.value='';placeholder.disabled=true;placeholder.selected=true;
@@ -154,7 +154,7 @@ if(jumps.length){
  for(const [i,m] of ordered.entries()){
   const option=document.createElement('option');
   option.value=String(i);
-  option.textContent=m.parameterName+' · '+(m.unit||'sin unidad identificada');
+  option.textContent=(m.parameterName||m.name)+' · '+(m.unit||'sin unidad identificada');
   chooser.append(option);
  }
  label.append(chooser);
