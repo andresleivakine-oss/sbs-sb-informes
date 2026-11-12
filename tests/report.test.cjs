@@ -180,3 +180,5 @@ assert.equal(vm.runInContext("comparisonPair(shoulderMetric,'summary',shoulderTe
 assert.equal(vm.runInContext("comparisonPair(shoulderMetric,'summary',shoulderTest,selectedDay,[{response:sameDay},{response:previousDay}],'latest').a.response.test",context),'previous-day');
 assert.match(nodes.get('report').innerHTML,/Revisar medición/);
 assert.match(nodes.get('report').innerHTML,/class="quantity">317,63 °/);
+assert.match(report, /<thead><tr><th scope="col"><h2>\d+ · Fuerza<\/h2><\/th><th scope="col">Inicial<\/th><th scope="col">Control/);
+assert.doesNotMatch(report, /<th>Evaluación<\/th>/);
