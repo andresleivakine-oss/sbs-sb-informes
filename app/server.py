@@ -325,11 +325,25 @@ def dynamo_metrics(t):
  output=[]
  for movement,values in summaries.items():
   if 'value' in values and len(values)>1:values.pop('value')
+  corrected=False
+  if group=="rom" and any(abs(value)>360 for value in values.values()):
+   for side,value in values.items():
+    candidates=[]
+    for rep in t.get('repetitions') or []:
+     if not isinstance(rep,dict) or rep.get('deleted') or rep.get('isDeleted'):continue
+     if lateral.get(rep.get('laterality'))!=side:continue
+     rep_movement=str(rep.get('movement') or test_movement).strip()
+     if rep_movement!=movement:continue
+     angle=rep.get('rangeOfMotionDegrees')
+     if finite(angle) and abs(angle)<=360:candidates.append(angle)
+    if candidates:
+     values[side]=max(candidates,key=abs)
+     corrected=True
   name=movement_name(movement)
   if normal(t.get('bodyRegion')) in ('shoulder','hombro') and position and ''.join(c for c in movement.lower() if c.isalpha()) in ('internalrotation','externalrotation'):
    name+=' · '+position
   output.append(build(field,name,('Fuerza máxima' if group=='force' else 'Movilidad máxima')+' · '+spanish_label(movement),
-   values,unit,'Máximo por lado · resúmenes DynaMo',
+   values,unit,'Máximo por lado · repeticiones válidas si el resumen excede 360°' if corrected else 'Máximo por lado · resúmenes DynaMo',
    'Fuerza máxima en la posición evaluada.' if group=='force' else 'Amplitud de movimiento; conservar signo y posición del protocolo.',
    None if movement==test_movement or core['movement']=='GripSqueeze' and spanish_label(movement)=='Fuerza de agarre' else movement))
  ratios={}
@@ -511,7 +525,7 @@ class Handler(SimpleHTTPRequestHandler):
 
 def main():
  global CID,SECRET,KINVENT,TENANT,TOKEN,SAVED,STORAGE_WARNING
- print('SBS / SB · Aplicación local 0.5.38 · Solo lectura.\nConfigura ambos proveedores desde Conexiones en la pantalla.\n')
+ print('SBS / SB · Aplicación local 0.5.39 · Solo lectura.\nConfigura ambos proveedores desde Conexiones en la pantalla.\n')
  if win_secrets.supported():
   try:SAVED=win_secrets.load()
   except Exception:STORAGE_WARNING='No se pudo recuperar la configuración protegida. Vuelve a configurar las conexiones.'
