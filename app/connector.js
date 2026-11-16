@@ -68,7 +68,10 @@ async function selectPatient(p){
  $('selectedPatient').textContent=(p.source==='vald'?'VALD':'Kinvent')+' · '+p.name+(p.birth?' · Nac. '+p.birth:'');
  $('apiHistory').hidden=false;syncSource();await startTests();
 }
+let historyRange;
+function dateRange(){return {start:$('apiFrom').value,end:$('apiTo').value};}
 async function startTests(){
+ historyRange=dateRange();
  historyPages=new Map();seenTests=new Set();loadedTests=[];$('apiTestList').replaceChildren();$('apiMetrics').replaceChildren();$('apiMore').hidden=true;
  $('apiHistoryNote').textContent='Consultando historial de '+(selectedPatient?.source==='vald'?'VALD':'Kinvent')+'…';
  msg('Cargando evaluaciones…');
@@ -99,6 +102,9 @@ function chileDayBoundary(day,end=false){
 }
 async function loadTests(more=false) {
  if(!selectedPatient)throw Error('Selecciona primero un paciente.');
+ const range=dateRange();
+ if(more&&(!historyRange||range.start!==historyRange.start||range.end!==historyRange.end))
+  throw Error('Cambiaste las fechas. Pulsa Actualizar evaluaciones antes de cargar más.');
  const version=++requestVersion,patient=selectedPatient;
  const choice=patient.source==='vald'?$('apiSystem').value:'kinvent';
  const systems=choice==='all'?['dyn','fd']:[choice];
@@ -106,7 +112,7 @@ async function loadTests(more=false) {
  const replies=await Promise.allSettled(pending.map(system=>{
   const previous=historyPages.get(system);
   return callApi('tests',{source:patient.source,patient:patient.id,system,
-   start:$('apiFrom').value,end:$('apiTo').value,startUtc:chileDayBoundary($('apiFrom').value),endUtc:chileDayBoundary($('apiTo').value,true),page:(previous?.page||0)+1,cursor:previous?.cursor||''});
+   ...range,startUtc:chileDayBoundary(range.start),endUtc:chileDayBoundary(range.end,true),page:(previous?.page||0)+1,cursor:previous?.cursor||''});
  }));
  if(version!==requestVersion)return;
  let added=0,failures=[],notes=[];
@@ -136,6 +142,11 @@ async function loadTests(more=false) {
 }
 $('apiTests').onclick=()=>runApi(startTests);
 $('apiMore').onclick=()=>{$('apiMetrics').replaceChildren();runApi(()=>loadTests(true))};
+async function extendComparison(test,button){
+ button.disabled=true;
+ try{await loadTests(true);if(selectedPatient&&loadedTests.some(item=>item===test))await loadMetrics(test);}
+ finally{button.disabled=false;}
+}
 function aggregate(m,how){if(!m.samples)return {...m.values};let vals={};for(const [limb,samples] of Object.entries(m.samples)){let n=samples.filter(x=>typeof x==='number'&&Number.isFinite(x));if(!n.length)continue;let side=limb.toLowerCase().includes('left')?'left':limb.toLowerCase().includes('right')?'right':'value';let v=how==='mean'?n.reduce((a,b)=>a+b,0)/n.length:how==='max'?Math.max(...n):n[+how];if(v===undefined)continue;if(vals[side]!==undefined)throw Error('Varios tipos de lado corresponden a la misma métrica. Selecciona otra métrica o registra manualmente.');vals[side]=v}return vals}
 async function loadMetrics(t){const patientAtRequest=selectedPatient.id,version=++requestVersion;let d=dynamoLateralResponse(t,await callApi('metrics',{key:t.key,patient:patientAtRequest}));if(!selectedPatient||selectedPatient.id!==patientAtRequest||version!==requestVersion)return;$('apiMetrics').replaceChildren();const comparisons=loadComparisonCandidates(t,patientAtRequest,version);let heading=document.createElement('h3');heading.style.fontSize='14px';heading.textContent=t.title;$('apiMetrics').append(heading);const metrics=d.metrics||[];
 const metricHost=document.createElement('div');
@@ -175,6 +186,10 @@ let values=document.createElement('p');values.className='hint';const show=()=>{t
  hint.className='hint';
  hint.textContent='Buscando evaluaciones compatibles en el historial cargado…';
  box.append(hint);
+ const moreHistory=document.createElement('button');
+ moreHistory.type='button';moreHistory.textContent='Cargar más historial';moreHistory.hidden=true;
+ moreHistory.onclick=()=>runApi(()=>extendComparison(t,moreHistory));
+ controls.append(moreHistory);
  const buttons=[['firstLast','Inicial y final'],['latest','Dos últimas']].map(([mode,caption])=>{
   const button=document.createElement('button');
   button.textContent=caption;
@@ -206,7 +221,8 @@ let values=document.createElement('p');values.className='hint';const show=()=>{t
    button.hidden=!pairs[i];
    button.onclick=()=>{if(version===requestVersion&&pairs[i])runApi(()=>applyComparison(comparisonMetric,method.value,selected?comparisonMetric.name:name.value,t,pairs[i],mode));};
   });
-  hint.textContent=pairs.some(Boolean)?'Hay dos o más evaluaciones compatibles en el historial cargado.':selected?'Hay un par de izquierda y derecha de la misma fecha.':'La comparación automática necesita evaluaciones compatibles en dos fechas distintas.';
+  moreHistory.hidden=!(historyPages.get(t.source)?.more&&selectedPatient?.source==='vald');
+  hint.textContent=pairs.some(Boolean)?'Hay dos o más evaluaciones compatibles en el historial cargado.':selected?'Hay un par de izquierda y derecha de la misma fecha.':'Para comparar, el historial debe incluir la evaluación anterior en otra fecha, con la misma métrica, unidad y protocolo compatible. Ajusta Desde y pulsa Actualizar evaluaciones si quedó fuera del intervalo.';
  };
  comparisons.then(results=>{
   if(version!==requestVersion)return;
@@ -406,6 +422,13 @@ function renderTests(){
 for(const id of ['filterKind','filterRegion','filterName'])$(id).oninput=renderTests;
 $('configProvider').onchange=()=>{const v=$('configProvider').value==='vald';$('valdConfigFields').hidden=!v;$('kinventConfigFields').hidden=v;$('configMessage').textContent='';};
 function resetApiViews(){resetPatientSearch();selectedPatient=null;loadedTests=[];seenTests=new Set();$('apiHistory').hidden=true;$('apiPatients').replaceChildren();$('apiTestList').replaceChildren();$('apiMetrics').replaceChildren();}
+document.addEventListener('report-cleared',()=>{
+ requestVersion++;
+ resetApiViews();
+ $('apiQuery').value='';
+ $('selectedPatient').textContent='';
+ msg('Busca al paciente para el nuevo informe.');
+});
 document.addEventListener('saved-report-opened',()=>{
  requestVersion++;
  resetApiViews();

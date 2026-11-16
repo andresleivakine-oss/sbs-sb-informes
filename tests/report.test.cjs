@@ -182,3 +182,21 @@ assert.match(nodes.get('report').innerHTML,/Revisar medición/);
 assert.match(nodes.get('report').innerHTML,/class="quantity">317,63 °/);
 assert.match(report, /<thead><tr><th scope="col"><h2>\d+ · Fuerza<\/h2><\/th><th scope="col">Inicial<\/th><th scope="col">Control/);
 assert.doesNotMatch(report, /<th>Evaluación<\/th>/);
+
+vm.runInContext(`
+ data.patient='Paciente de prueba';
+ data.diagnosis='Diagnóstico anterior';
+ data.professional='Profesional de prueba';
+ data.rows=[{group:'rom',name:'Flexión'}];
+`,context);
+context.confirm=()=>false;
+context.Event=class {constructor(type){this.type=type;}};
+context.document.dispatchEvent=event=>{context.lastEvent=event.type;};
+nodes.get('clearReport').onclick();
+assert.equal(vm.runInContext('data.rows.length',context),1);
+context.confirm=()=>true;
+nodes.get('clearReport').onclick();
+assert.equal(vm.runInContext('data.rows.length',context),0);
+assert.equal(vm.runInContext('data.patient',context),'');
+assert.equal(vm.runInContext('data.professional',context),'Profesional de prueba');
+assert.equal(context.lastEvent,'report-cleared');
