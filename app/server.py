@@ -299,9 +299,17 @@ def dynamo_metrics(t):
   return spanish_label(' · '.join(filter(None,[str(t.get('bodyRegion') or ''),value])))
  def build(metric_id,name,parameter,values,metric_unit,method,kpi,discriminator=None):
   suffix=[] if discriminator is None else [discriminator]
+  comparison_core=core
+  comparison_suffix=suffix
+  if group=='force' and normal(t.get('bodyRegion')) in ('shoulder','hombro') and metric_id==field:
+   movement=discriminator if combined_rotation else test_movement
+   movement_key=''.join(c for c in str(movement or '').lower() if c.isalpha())
+   if movement_key in ('internalrotation','externalrotation'):
+    comparison_core={**core,'movement':movement_key}
+    comparison_suffix=[]
   return {'id':metric_id,'name':name,'parameterName':parameter,'unit':metric_unit,'group':group,'values':values,
    'method':method,'protocol':position,'fingerprint':fingerprint(['DynaMo',protocol,metric_id,metric_unit,*suffix]),
-   'comparisonProtocol':fingerprint(['DynaMo',core,metric_id,metric_unit,*suffix]),'attachments':setup,'kpi':kpi}
+   'comparisonProtocol':fingerprint(['DynaMo',comparison_core,metric_id,metric_unit,*comparison_suffix]),'attachments':setup,'kpi':kpi}
  lateral={'LeftSide':'left','RightSide':'right','Left':'left','Right':'right','BothSides':'value','None':'value'}
  summaries={}
  for entry in t.get('repetitionTypeSummaries') or []:
@@ -503,7 +511,7 @@ class Handler(SimpleHTTPRequestHandler):
 
 def main():
  global CID,SECRET,KINVENT,TENANT,TOKEN,SAVED,STORAGE_WARNING
- print('SBS / SB · Aplicación local 0.5.37 · Solo lectura.\nConfigura ambos proveedores desde Conexiones en la pantalla.\n')
+ print('SBS / SB · Aplicación local 0.5.38 · Solo lectura.\nConfigura ambos proveedores desde Conexiones en la pantalla.\n')
  if win_secrets.supported():
   try:SAVED=win_secrets.load()
   except Exception:STORAGE_WARNING='No se pudo recuperar la configuración protegida. Vuelve a configurar las conexiones.'

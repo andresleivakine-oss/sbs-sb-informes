@@ -340,10 +340,16 @@ function linkedDynamoSessions(metric,test,response,results){
  }
  return linked;
 }
+function comparisonTitle(test){
+ const title=pairText(test.title);
+ if(test.source!=='dyn'||test.kind!=='force')return title;
+ if(!/\b(?:hombro|shoulder)\b/.test(title))return title;
+ return title.replace(/\b(?:internalrotationexternalrotation|rotacion interna externa|rotacion interna|rotacion externa|internal rotation|external rotation)\b/,'rotacion hombro');
+}
 async function loadComparisonCandidates(test,patient,version) {
  const results=[];
  const candidates=loadedTests.filter(other=>other.key!==test.key&&other.source===test.source&&evaluationDate(other.date)&&(other.title===test.title||
-  test.source==='dyn'&&other.kind===test.kind&&pairText(other.title)===pairText(test.title)));
+  test.source==='dyn'&&other.kind===test.kind&&comparisonTitle(other)===comparisonTitle(test)));
  for(const other of candidates){
   if(requestVersion!==version)return [];
   try{
@@ -465,17 +471,19 @@ async function addSelectedTests(){
       metric=bilateral?.metric||metric;
       const record=bilateral?.response||response;
       const values=aggregate(metric,method);
-      const row=metricRow(metric,values,method,patient,test,metric.name);
+      const comparing=mode==='firstLast'||mode==='latest';
+      const pair=comparing?comparisonPair(metric,method,test,record,bilateral?linked.filter(item=>item!==bilateral):results,mode):null;
+      if(comparing&&!pair)throw Error('sin comparación compatible. Puedes cargarla como Inicial o Control');
+      if(pair?.unknown)throw Error('confirma los accesorios desde el detalle');
+      const row=pair?metricRow(pair.b.metric,pair.b.values,method,patient,pair.b.test||test,metric.name):
+       metricRow(metric,values,method,patient,test,metric.name);
       if(!row.importKey)throw Error('protocolo sin identificador de comparación');
       const existing=ready.find(item=>item.row.importKey===row.importKey);
       if(existing){
        if((mode==='initial'||mode==='control')&&existing.testId!==record.test)throw Error('ya hay otro registro de esta prueba seleccionado para la misma columna');
        existing.keys.push(test.key);continue;
       }
-      if(mode==='firstLast'||mode==='latest'){
-       const pair=comparisonPair(metric,method,test,record,bilateral?linked.filter(item=>item!==bilateral):results,mode);
-       if(!pair)throw Error('sin comparación compatible. Puedes cargarla como Inicial o Control');
-       if(pair.unknown)throw Error('confirma los accesorios desde el detalle');
+      if(pair){
        writeMetricSlot(row,'initial',pair.a.values,pair.a.response,evaluationDate(pair.a.response.date));
        writeMetricSlot(row,'control',pair.b.values,pair.b.response,evaluationDate(pair.b.response.date));
        row.comparisonMode=mode==='latest'?'Dos últimas':'Inicial y final';
@@ -500,7 +508,7 @@ async function addSelectedTests(){
    for(const key of keys)selectedTests.delete(key);
   }
   if(ready.length){editors();report();}
-  $('batchResult').textContent=(ready.length?ready.length+' filas agregadas o actualizadas. ':'Sin cambios en el informe. ')+notes.join(' · ');
+  $('batchResult').textContent=(ready.length?ready.length+' filas agregadas o actualizadas. ':'Sin cambios en el informe. ')+[...new Set(notes)].join(' · ');
   renderTests();
  }finally{batchRunning=false;refreshBatchButton();}
 }
