@@ -413,13 +413,19 @@ const baseSave=$('save').onclick;$('save').onclick=()=>{baseSave()};
 $('apiSystem').onchange=()=>{if(selectedPatient?.source==='vald')runApi(startTests)};
 
 const selectedTests=new Set();
-let activeTest='',batchRunning=false;
+let activeTest='',batchRunning=false,visibleTests=[];
 function refreshBatchButton(){
+ const selectAll=$('batchSelectAll');
+ const count=visibleTests.filter(test=>selectedTests.has(test.key)).length;
+ selectAll.disabled=batchRunning||!visibleTests.length;
+ selectAll.checked=visibleTests.length>0&&count===visibleTests.length;
+ selectAll.indeterminate=count>0&&count<visibleTests.length;
  $('batchAdd').disabled=batchRunning||!selectedTests.size;
  $('batchAdd').textContent='Agregar seleccionadas ('+selectedTests.size+')';
 }
 function resetTestSelection(){
  selectedTests.clear();
+ visibleTests=[];
  activeTest='';
  $('batchResult').textContent='';
  refreshBatchButton();
@@ -493,10 +499,19 @@ async function addSelectedTests(){
  }finally{batchRunning=false;refreshBatchButton();}
 }
 $('batchAdd').onclick=()=>runApi(addSelectedTests);
+$('batchSelectAll').onchange=event=>{
+ for(const test of visibleTests){
+  if(event.target.checked)selectedTests.add(test.key);
+  else selectedTests.delete(test.key);
+ }
+ renderTests();
+};
 function renderTests(){
  $('apiTestList').replaceChildren();
  const q=$('filterName').value.trim().toLocaleLowerCase('es'),kind=$('filterKind').value,region=$('filterRegion').value;
  const items=loadedTests.filter(t=>(!q||(t.title+' '+(t.originalTitle||'')).toLocaleLowerCase('es').includes(q))&&(!kind||t.kind===kind)&&(!region||t.region===region)).sort((a,b)=>(Date.parse(b.date)||0)-(Date.parse(a.date)||0));
+ visibleTests=items;
+ refreshBatchButton();
  $('filterCount').textContent=items.length+' visibles de '+loadedTests.length+' evaluaciones cargadas. Recientes primero.';
  for(const t of items){let b=document.createElement('button');b.style.cssText='display:block;width:100%;text-align:left;margin:6px 0';const date=new Date(t.date);b.textContent=(!isNaN(date)?date.toLocaleString('es-CL',{timeZone:'America/Santiago'}):'Fecha por confirmar')+' · '+t.title;const label=document.createElement('small');label.textContent=(t.source==='fd'?'VALD ForceDecks':t.source==='dyn'?'VALD DynaMo':'Kinvent')+' · '+({force:'Fuerza',rom:'ROM',jump:'Salto',balance:'Equilibrio',endurance:'Resistencia',other:'Sin clasificar'}[t.kind]||'Revisar tipo');b.append(label);b.title=t.originalTitle||t.title;b.dataset.testKey=t.key;b.onclick=()=>runApi(()=>loadMetrics(t));
  const line=document.createElement('div');line.className='test-choice';
