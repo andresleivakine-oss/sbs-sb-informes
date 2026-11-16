@@ -71,6 +71,7 @@ async function selectPatient(p){
 let historyRange;
 function dateRange(){return {start:$('apiFrom').value,end:$('apiTo').value};}
 async function startTests(){
+ resetTestSelection();
  historyRange=dateRange();
  historyPages=new Map();seenTests=new Set();loadedTests=[];$('apiTestList').replaceChildren();$('apiMetrics').replaceChildren();$('apiMore').hidden=true;
  $('apiHistoryNote').textContent='Consultando historial de '+(selectedPatient?.source==='vald'?'VALD':'Kinvent')+'…';
@@ -84,7 +85,7 @@ $('apiQuery').addEventListener('input',resetPatientSearch);
 $('apiAthlete').onchange=resetPatientSearch;
 $('apiNext').onclick=()=>{if(source()!=='kinvent'||!searchHasMore)return;searchPage++;runApi(findPatients)};
 $('apiPrev').onclick=()=>{if(source()!=='kinvent'||searchPage===0)return;searchPage--;runApi(findPatients)};
-$('apiSource').onchange=()=>{requestVersion++;selectedPatient=null;resetPatientSearch();$('apiHistory').hidden=true;$('apiMetrics').replaceChildren();syncSource();msg('Busca un paciente en la fuente elegida. El informe actual se conserva hasta seleccionar otro paciente.')};
+$('apiSource').onchange=()=>{requestVersion++;selectedPatient=null;resetTestSelection();resetPatientSearch();$('apiHistory').hidden=true;$('apiMetrics').replaceChildren();syncSource();msg('Busca un paciente en la fuente elegida. El informe actual se conserva hasta seleccionar otro paciente.')};
 function chileDayBoundary(day,end=false){
  const match=/^(\d{4})-(\d{2})-(\d{2})$/.exec(day);
  if(!match)throw Error('Selecciona fechas válidas.');
@@ -148,7 +149,7 @@ async function extendComparison(test,button){
  finally{button.disabled=false;}
 }
 function aggregate(m,how){if(!m.samples)return {...m.values};let vals={};for(const [limb,samples] of Object.entries(m.samples)){let n=samples.filter(x=>typeof x==='number'&&Number.isFinite(x));if(!n.length)continue;let side=limb.toLowerCase().includes('left')?'left':limb.toLowerCase().includes('right')?'right':'value';let v=how==='mean'?n.reduce((a,b)=>a+b,0)/n.length:how==='max'?Math.max(...n):n[+how];if(v===undefined)continue;if(vals[side]!==undefined)throw Error('Varios tipos de lado corresponden a la misma métrica. Selecciona otra métrica o registra manualmente.');vals[side]=v}return vals}
-async function loadMetrics(t){const patientAtRequest=selectedPatient.id,version=++requestVersion;let d=dynamoLateralResponse(t,await callApi('metrics',{key:t.key,patient:patientAtRequest}));if(!selectedPatient||selectedPatient.id!==patientAtRequest||version!==requestVersion)return;$('apiMetrics').replaceChildren();const comparisons=loadComparisonCandidates(t,patientAtRequest,version);let heading=document.createElement('h3');heading.style.fontSize='14px';heading.textContent=t.title;$('apiMetrics').append(heading);const metrics=d.metrics||[];
+async function loadMetrics(t){activeTest=t.key;markActiveTest();const patientAtRequest=selectedPatient.id,version=++requestVersion;let d=dynamoLateralResponse(t,await callApi('metrics',{key:t.key,patient:patientAtRequest}));if(!selectedPatient||selectedPatient.id!==patientAtRequest||version!==requestVersion)return;$('apiMetrics').replaceChildren();const comparisons=loadComparisonCandidates(t,patientAtRequest,version);let heading=document.createElement('h3');heading.style.fontSize='14px';heading.textContent=t.title;$('apiMetrics').append(heading);const metrics=d.metrics||[];
 const metricHost=document.createElement('div');
 const jumps=metrics.filter(m=>m.group==='biomech');
 if(metrics.length>1||jumps.length){
@@ -270,14 +271,13 @@ function autoJoinImportedRow(index,patient){
  const candidates=matches(row);
  if(candidates.length===1&&matches(data.rows[candidates[0]]).length===1)joinSides(index,candidates[0],true);
 }
-function saveMetricRow(row,patient) {
+function saveMetricRow(row,patient,redraw=true) {
  row.origin='Paciente '+patient.name+' · Inicial: '+(row.initialTest||'sin cargar')+' · Control: '+(row.controlTest||'sin cargar');
  row.reviewed=false;
  const index=row.importKey?data.rows.findIndex(x=>x.importKey===row.importKey):-1;
  if(index<0)data.rows.push(row);else data.rows[index]=row;
  autoJoinImportedRow(index<0?data.rows.length-1:index,patient);
- editors();
- report();
+ if(redraw){editors();report();}
 }
 function evaluationDate(date) {
  const parsed=new Date(date);
@@ -412,16 +412,103 @@ async function applyComparison(metric,method,label,test,pair,mode) {
 const baseSave=$('save').onclick;$('save').onclick=()=>{baseSave()};
 $('apiSystem').onchange=()=>{if(selectedPatient?.source==='vald')runApi(startTests)};
 
+const selectedTests=new Set();
+let activeTest='',batchRunning=false;
+function refreshBatchButton(){
+ $('batchAdd').disabled=batchRunning||!selectedTests.size;
+ $('batchAdd').textContent='Agregar seleccionadas ('+selectedTests.size+')';
+}
+function resetTestSelection(){
+ selectedTests.clear();
+ activeTest='';
+ $('batchResult').textContent='';
+ refreshBatchButton();
+}
+function markActiveTest(){
+ for(const button of $('apiTestList').querySelectorAll('button[data-test-key]'))
+  button.setAttribute('aria-current',String(button.dataset.testKey===activeTest));
+}
+async function addSelectedTests(){
+ const patient=selectedPatient;
+ if(!patient||!selectedTests.size||batchRunning)return;
+ const mode=$('batchMode').value;
+ const version=requestVersion;
+ const chosen=loadedTests.filter(test=>selectedTests.has(test.key));
+ batchRunning=true;refreshBatchButton();
+ $('batchResult').textContent='Revisando las evaluaciones seleccionadas…';
+ const ready=[],notes=[];
+ try{
+  for(const test of chosen){
+   if(version!==requestVersion)return;
+   try{
+    const response=dynamoLateralResponse(test,await callApi('metrics',{key:test.key,patient:patient.id}));
+    if(version!==requestVersion)return;
+    const available=response.metrics.filter(metric=>metric.unit);
+    const preferred=available.filter(metric=>metric.preferred);
+    let metric=available.length===1?available[0]:preferred.length===1?preferred[0]:null;
+    if(!metric)throw Error(available.length?'elige el parámetro en el detalle':'sin métrica reconocida');
+    const method=metric.samples?'max':'summary';
+    const results=(metric.dynamoSide||mode==='firstLast'||mode==='latest')?await loadComparisonCandidates(test,patient.id,version):[];
+    if(version!==requestVersion)return;
+    const linked=linkedDynamoSessions(metric,test,response,results);
+    const bilateral=linked.find(item=>item.response.test.split(' / ').includes(response.test));
+    metric=bilateral?.metric||metric;
+    const record=bilateral?.response||response;
+    const values=aggregate(metric,method);
+    const row=metricRow(metric,values,method,patient,test,metric.name);
+    if(!row.importKey)throw Error('protocolo sin identificador de comparación');
+    const existing=ready.find(item=>item.row.importKey===row.importKey);
+    if(existing){
+     if((mode==='initial'||mode==='control')&&existing.testId!==record.test)throw Error('ya hay otro registro de esta prueba seleccionado para la misma columna');
+     existing.keys.push(test.key);continue;
+    }
+    if(mode==='firstLast'||mode==='latest'){
+     const pair=comparisonPair(metric,method,test,record,bilateral?linked.filter(item=>item!==bilateral):results,mode);
+     if(!pair)throw Error('sin evaluaciones compatibles en fechas distintas');
+     if(pair.unknown)throw Error('confirma los accesorios desde el detalle');
+     writeMetricSlot(row,'initial',pair.a.values,pair.a.response,evaluationDate(pair.a.response.date));
+     writeMetricSlot(row,'control',pair.b.values,pair.b.response,evaluationDate(pair.b.response.date));
+     row.comparisonMode=mode==='latest'?'Dos últimas':'Inicial y final';
+    }else{
+     const date=evaluationDate(record.date);
+     if(!date)throw Error('fecha sin confirmar');
+     const opposite=mode==='initial'?'controlTest':'initialTest';
+     if(row[opposite]===record.test)throw Error('el registro ya ocupa la otra columna');
+     writeMetricSlot(row,mode,values,record,date);
+     row.comparisonMode='';
+    }
+    ready.push({row,testId:record.test,keys:[test.key]});
+   }catch(error){notes.push(test.title+' · '+error.message);}
+  }
+  if(version!==requestVersion)return;
+  if(ready.some(({row})=>data.rows.some(old=>old.importKey===row.importKey))&&
+   !confirm('Hay filas que ya figuran en el informe. ¿Actualizar sus mediciones?'))return;
+  for(const {row,keys} of ready){
+   saveMetricRow(row,patient,false);
+   for(const key of keys)selectedTests.delete(key);
+  }
+  if(ready.length){editors();report();}
+  $('batchResult').textContent=(ready.length?ready.length+' filas agregadas o actualizadas. ':'Sin cambios en el informe. ')+notes.join(' · ');
+  renderTests();
+ }finally{batchRunning=false;refreshBatchButton();}
+}
+$('batchAdd').onclick=()=>runApi(addSelectedTests);
 function renderTests(){
  $('apiTestList').replaceChildren();
  const q=$('filterName').value.trim().toLocaleLowerCase('es'),kind=$('filterKind').value,region=$('filterRegion').value;
  const items=loadedTests.filter(t=>(!q||(t.title+' '+(t.originalTitle||'')).toLocaleLowerCase('es').includes(q))&&(!kind||t.kind===kind)&&(!region||t.region===region)).sort((a,b)=>(Date.parse(b.date)||0)-(Date.parse(a.date)||0));
  $('filterCount').textContent=items.length+' visibles de '+loadedTests.length+' evaluaciones cargadas. Recientes primero.';
- for(const t of items){let b=document.createElement('button');b.style.cssText='display:block;width:100%;text-align:left;margin:6px 0';const date=new Date(t.date);b.textContent=(!isNaN(date)?date.toLocaleString('es-CL',{timeZone:'America/Santiago'}):'Fecha por confirmar')+' · '+t.title;const label=document.createElement('small');label.textContent=(t.source==='fd'?'VALD ForceDecks':t.source==='dyn'?'VALD DynaMo':'Kinvent')+' · '+({force:'Fuerza',rom:'ROM',jump:'Salto',balance:'Equilibrio',endurance:'Resistencia',other:'Sin clasificar'}[t.kind]||'Revisar tipo');b.append(label);b.title=t.originalTitle||t.title;b.onclick=()=>runApi(()=>loadMetrics(t));$('apiTestList').append(b)}
+ for(const t of items){let b=document.createElement('button');b.style.cssText='display:block;width:100%;text-align:left;margin:6px 0';const date=new Date(t.date);b.textContent=(!isNaN(date)?date.toLocaleString('es-CL',{timeZone:'America/Santiago'}):'Fecha por confirmar')+' · '+t.title;const label=document.createElement('small');label.textContent=(t.source==='fd'?'VALD ForceDecks':t.source==='dyn'?'VALD DynaMo':'Kinvent')+' · '+({force:'Fuerza',rom:'ROM',jump:'Salto',balance:'Equilibrio',endurance:'Resistencia',other:'Sin clasificar'}[t.kind]||'Revisar tipo');b.append(label);b.title=t.originalTitle||t.title;b.dataset.testKey=t.key;b.onclick=()=>runApi(()=>loadMetrics(t));
+ const line=document.createElement('div');line.className='test-choice';
+ const check=document.createElement('input');check.type='checkbox';check.checked=selectedTests.has(t.key);
+ check.setAttribute('aria-label','Seleccionar '+b.textContent);
+ check.onchange=()=>{if(check.checked)selectedTests.add(t.key);else selectedTests.delete(t.key);refreshBatchButton();};
+ line.append(check,b);$('apiTestList').append(line)}
+ markActiveTest();
 }
 for(const id of ['filterKind','filterRegion','filterName'])$(id).oninput=renderTests;
 $('configProvider').onchange=()=>{const v=$('configProvider').value==='vald';$('valdConfigFields').hidden=!v;$('kinventConfigFields').hidden=v;$('configMessage').textContent='';};
-function resetApiViews(){resetPatientSearch();selectedPatient=null;loadedTests=[];seenTests=new Set();$('apiHistory').hidden=true;$('apiPatients').replaceChildren();$('apiTestList').replaceChildren();$('apiMetrics').replaceChildren();}
+function resetApiViews(){resetTestSelection();resetPatientSearch();selectedPatient=null;loadedTests=[];seenTests=new Set();$('apiHistory').hidden=true;$('apiPatients').replaceChildren();$('apiTestList').replaceChildren();$('apiMetrics').replaceChildren();}
 document.addEventListener('report-cleared',()=>{
  requestVersion++;
  resetApiViews();

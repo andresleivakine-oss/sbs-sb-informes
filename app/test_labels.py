@@ -18,7 +18,8 @@ LABELS = {
     'knee': 'Rodilla', 'ankle': 'Tobillo', 'hip': 'Cadera',
     'shoulder': 'Hombro', 'trunk': 'Tronco', 'neck': 'Cuello',
     'elbow': 'Codo', 'wrist': 'Muñeca', 'hand': 'Mano', 'foot': 'Pie',
-    'flexion': 'Flexión', 'extension': 'Extensión', 'rotation': 'Rotación',
+    'grip squeeze': 'Fuerza de agarre', 'hand grip squeeze': 'Fuerza de agarre', 'grip': 'Fuerza de agarre',
+    'horizontal abduction': 'Abducción horizontal', 'flexion': 'Flexión', 'extension': 'Extensión', 'rotation': 'Rotación',
     'lateral flexion': 'Flexión lateral', 'external rotation': 'Rotación externa',
     'internal rotation': 'Rotación interna', 'abduction': 'Abducción',
     'adduction': 'Aducción', 'plantar flexion': 'Flexión plantar',
@@ -54,6 +55,10 @@ def spanish_label(value):
         return ''
     if ' · ' in original:
         return ' · '.join(spanish_label(part) for part in original.split(' · ') if part.strip())
+    elbow = re.fullmatch(r'(Seated|Standing)Elbow(\d+)Degrees?', original, re.IGNORECASE)
+    if elbow:
+        posture = 'Sentado' if elbow[1].lower() == 'seated' else 'De pie'
+        return f'{posture}, codo a {elbow[2]}°'
     position = re.fullmatch(r'Seated(\d+)DegreeKneeFlexion', original, re.IGNORECASE)
     if position:
         return f'Sentado, rodilla a {position[1]}° de flexión'

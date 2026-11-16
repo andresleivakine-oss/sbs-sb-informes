@@ -200,3 +200,8 @@ assert.equal(vm.runInContext('data.rows.length',context),0);
 assert.equal(vm.runInContext('data.patient',context),'');
 assert.equal(vm.runInContext('data.professional',context),'Profesional de prueba');
 assert.equal(context.lastEvent,'report-cleared');
+
+assert.match(html, /<main class="workspace"><section id="apiHistory"/);
+assert.match(html, /<select id="batchMode">/);
+assert.match(html, /\.sheet h1,\.sheet h2\{font-size:12pt\}/);
+assert.match(html, /@media print\{#apiHistory\{display:none!important\}/);

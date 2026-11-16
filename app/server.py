@@ -292,6 +292,8 @@ def dynamo_metrics(t):
  protocol={k:t.get(k) for k in ['testCategory','bodyRegion','movement','position','customPosition','attachments','leftAttachment','rightAttachment']}
  setup={key:protocol[key] for key in ('attachments','leftAttachment','rightAttachment')}
  core={key:protocol[key] for key in ('testCategory','bodyRegion','movement','position','customPosition')}
+ if str(core['bodyRegion'] or '').lower()=='hand' and spanish_label(test_movement)=='Fuerza de agarre':
+  core['movement']=protocol['movement']='GripSqueeze'
  position=spanish_label(' · '.join(str(t.get(k) or '') for k in ['position','customPosition']).strip(' ·'))
  def movement_name(value):
   return spanish_label(' · '.join(filter(None,[str(t.get('bodyRegion') or ''),value])))
@@ -321,7 +323,7 @@ def dynamo_metrics(t):
   output.append(build(field,name,('Fuerza máxima' if group=='force' else 'Movilidad máxima')+' · '+spanish_label(movement),
    values,unit,'Máximo por lado · resúmenes DynaMo',
    'Fuerza máxima en la posición evaluada.' if group=='force' else 'Amplitud de movimiento; conservar signo y posición del protocolo.',
-   None if movement==test_movement else movement))
+   None if movement==test_movement or core['movement']=='GripSqueeze' and spanish_label(movement)=='Fuerza de agarre' else movement))
  ratios={}
  for entry in t.get('ratios') or []:
   if not isinstance(entry,dict):continue
@@ -501,7 +503,7 @@ class Handler(SimpleHTTPRequestHandler):
 
 def main():
  global CID,SECRET,KINVENT,TENANT,TOKEN,SAVED,STORAGE_WARNING
- print('SBS / SB · Aplicación local 0.5.34 · Solo lectura.\nConfigura ambos proveedores desde Conexiones en la pantalla.\n')
+ print('SBS / SB · Aplicación local 0.5.35 · Solo lectura.\nConfigura ambos proveedores desde Conexiones en la pantalla.\n')
  if win_secrets.supported():
   try:SAVED=win_secrets.load()
   except Exception:STORAGE_WARNING='No se pudo recuperar la configuración protegida. Vuelve a configurar las conexiones.'
