@@ -451,39 +451,45 @@ async function addSelectedTests(){
     if(version!==requestVersion)return;
     const available=response.metrics.filter(metric=>metric.unit);
     const preferred=available.filter(metric=>metric.preferred);
-    let metric=available.length===1?available[0]:preferred.length===1?preferred[0]:null;
-    if(!metric)throw Error(available.length?'elige el parámetro en el detalle':'sin métrica reconocida');
-    const method=metric.samples?'max':'summary';
-    const results=(metric.dynamoSide||mode==='firstLast'||mode==='latest')?await loadComparisonCandidates(test,patient.id,version):[];
+    const strength=available.filter(metric=>metric.group==='force'&&metric.unit!=='ratio');
+    const metrics=available.length===1?available:strength.length?strength:preferred.length===1?preferred:[];
+    if(!metrics.length)throw Error(available.length?'elige el parámetro en el detalle':'sin métrica reconocida');
+    const results=(metrics.some(metric=>metric.dynamoSide)||mode==='firstLast'||mode==='latest')?await loadComparisonCandidates(test,patient.id,version):[];
     if(version!==requestVersion)return;
-    const linked=linkedDynamoSessions(metric,test,response,results);
-    const bilateral=linked.find(item=>item.response.test.split(' / ').includes(response.test));
-    metric=bilateral?.metric||metric;
-    const record=bilateral?.response||response;
-    const values=aggregate(metric,method);
-    const row=metricRow(metric,values,method,patient,test,metric.name);
-    if(!row.importKey)throw Error('protocolo sin identificador de comparación');
-    const existing=ready.find(item=>item.row.importKey===row.importKey);
-    if(existing){
-     if((mode==='initial'||mode==='control')&&existing.testId!==record.test)throw Error('ya hay otro registro de esta prueba seleccionado para la misma columna');
-     existing.keys.push(test.key);continue;
+    for(const original of metrics){
+     try{
+      let metric=original;
+      const method=metric.samples?'max':'summary';
+      const linked=linkedDynamoSessions(metric,test,response,results);
+      const bilateral=linked.find(item=>item.response.test.split(' / ').includes(response.test));
+      metric=bilateral?.metric||metric;
+      const record=bilateral?.response||response;
+      const values=aggregate(metric,method);
+      const row=metricRow(metric,values,method,patient,test,metric.name);
+      if(!row.importKey)throw Error('protocolo sin identificador de comparación');
+      const existing=ready.find(item=>item.row.importKey===row.importKey);
+      if(existing){
+       if((mode==='initial'||mode==='control')&&existing.testId!==record.test)throw Error('ya hay otro registro de esta prueba seleccionado para la misma columna');
+       existing.keys.push(test.key);continue;
+      }
+      if(mode==='firstLast'||mode==='latest'){
+       const pair=comparisonPair(metric,method,test,record,bilateral?linked.filter(item=>item!==bilateral):results,mode);
+       if(!pair)throw Error('sin comparación compatible. Puedes cargarla como Inicial o Control');
+       if(pair.unknown)throw Error('confirma los accesorios desde el detalle');
+       writeMetricSlot(row,'initial',pair.a.values,pair.a.response,evaluationDate(pair.a.response.date));
+       writeMetricSlot(row,'control',pair.b.values,pair.b.response,evaluationDate(pair.b.response.date));
+       row.comparisonMode=mode==='latest'?'Dos últimas':'Inicial y final';
+      }else{
+       const date=evaluationDate(record.date);
+       if(!date)throw Error('fecha sin confirmar');
+       const opposite=mode==='initial'?'controlTest':'initialTest';
+       if(row[opposite]===record.test)throw Error('el registro ya ocupa la otra columna');
+       writeMetricSlot(row,mode,values,record,date);
+       row.comparisonMode='';
+      }
+      ready.push({row,testId:record.test,keys:[test.key]});
+     }catch(error){notes.push(original.name+' · '+error.message);}
     }
-    if(mode==='firstLast'||mode==='latest'){
-     const pair=comparisonPair(metric,method,test,record,bilateral?linked.filter(item=>item!==bilateral):results,mode);
-     if(!pair)throw Error('sin evaluaciones compatibles en fechas distintas');
-     if(pair.unknown)throw Error('confirma los accesorios desde el detalle');
-     writeMetricSlot(row,'initial',pair.a.values,pair.a.response,evaluationDate(pair.a.response.date));
-     writeMetricSlot(row,'control',pair.b.values,pair.b.response,evaluationDate(pair.b.response.date));
-     row.comparisonMode=mode==='latest'?'Dos últimas':'Inicial y final';
-    }else{
-     const date=evaluationDate(record.date);
-     if(!date)throw Error('fecha sin confirmar');
-     const opposite=mode==='initial'?'controlTest':'initialTest';
-     if(row[opposite]===record.test)throw Error('el registro ya ocupa la otra columna');
-     writeMetricSlot(row,mode,values,record,date);
-     row.comparisonMode='';
-    }
-    ready.push({row,testId:record.test,keys:[test.key]});
    }catch(error){notes.push(test.title+' · '+error.message);}
   }
   if(version!==requestVersion)return;
