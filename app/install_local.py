@@ -3,6 +3,11 @@ import os,sys,shutil,tempfile,urllib.request,zipfile
 from pathlib import Path
 FILES=['index.html','connector.js','server.py','vald_common.py','win_secrets.py','test_labels.py','install_local.py','LEEME.txt','INICIAR.bat','INSTALAR.bat']
 
+def app_base():
+ if sys.platform=='darwin':return Path.home()/'Library'/'Application Support'/'SBS_SB'
+ if os.name=='nt':return Path(os.environ['LOCALAPPDATA'])/'SBS_SB'
+ raise RuntimeError('Instalación disponible para Windows y macOS.')
+
 def running():
  try:
   with urllib.request.urlopen('http://127.0.0.1:8877/api/session',timeout=2) as r:return r.status==200
@@ -20,7 +25,7 @@ def validate_zip(path):
  if set(out)!=set(FILES):raise ValueError('Faltan archivos de la aplicación. Usa el paquete completo.')
  return out
 
-VERSION='0.5.39'
+VERSION='0.5.40'
 UPDATE_ROOT='https://raw.githubusercontent.com/andresleivakine-oss/sbs-sb-informes/main/'
 
 def version_tuple(value):
@@ -65,12 +70,11 @@ def validate_package_version(payload,version):
 
 def stage_online_update():
  import hashlib,subprocess
- if os.name!='nt':raise RuntimeError('La instalación automática requiere Windows.')
  m=parse_manifest(online_read('updates/latest.json',16000))
  if version_tuple(m['version'])<=version_tuple(VERSION):raise ValueError('No hay una versión nueva para instalar.')
  data=online_read(m['package'],5_000_000)
  if hashlib.sha256(data).hexdigest()!=m['sha256']:raise ValueError('La descarga no supera la comprobación SHA-256. No se ha instalado.')
- base=Path(os.environ['LOCALAPPDATA'])/'SBS_SB';stage=base/'update-pending';stage.mkdir(parents=True,exist_ok=True)
+ base=app_base();stage=base/'update-pending';stage.mkdir(parents=True,exist_ok=True)
  archive=stage/'package.zip';archive.write_bytes(data)
  payload=validate_zip(archive);validate_package_version(payload,m['version'])
  # El código que aplica el cambio es el actualizador de la versión instalada.
@@ -79,8 +83,7 @@ def stage_online_update():
  return {'message':'Descarga verificada. La aplicación se cerrará y volverá a abrirse al terminar.','version':m['version']}
 
 def install_payload(payload):
- if os.name!='nt':raise RuntimeError('La instalación requiere Windows.')
- base=Path(os.environ['LOCALAPPDATA'])/'SBS_SB';target=base/'app';base.mkdir(parents=True,exist_ok=True)
+ base=app_base();target=base/'app';base.mkdir(parents=True,exist_ok=True)
  if running():raise RuntimeError('La aplicación sigue abierta. No se ha modificado.')
  stage=Path(tempfile.mkdtemp(prefix='app-next-',dir=base));backup=base/'app-anterior'
  try:
@@ -93,7 +96,18 @@ def install_payload(payload):
    raise
  finally:
   if stage.exists():shutil.rmtree(stage)
- runtime = base/'python'/'python.exe'
+ if sys.platform=='darwin':
+  import shlex,subprocess
+  launcher=base/'Abrir SBS SB.command'
+  launcher.write_text('#!/bin/bash\ncd '+shlex.quote(str(target))+'\nexec '+shlex.quote(sys.executable)+' server.py\n',encoding='utf-8')
+  launcher.chmod(0o700)
+  desktop=Path.home()/'Desktop'/'Informes SBS SB.command'
+  if desktop.parent.is_dir():
+   desktop.write_bytes(launcher.read_bytes());desktop.chmod(0o700)
+  print('Instalado. Abre Informes SBS SB desde el escritorio. Actualiza desde la aplicación.')
+  subprocess.Popen(['/usr/bin/open',str(launcher)])
+  return
+ runtime = base/'python'/'python.exe' 
  command = '"%LOCALAPPDATA%\\SBS_SB\\python\\python.exe"' if runtime.is_file() else 'py -3'
  app = r'%LOCALAPPDATA%\SBS_SB\app'
  launcher = f'@echo off\nchcp 65001 >nul\ncd /d "{app}"\n{command} server.py\nif errorlevel 1 pause\n'
@@ -107,7 +121,7 @@ def install_payload(payload):
  os.startfile(str(base/'Abrir SBS SB.cmd'))
 
 def main():
- if os.name!='nt':raise RuntimeError('Esta instalación es para Windows.')
+ app_base()
  if '--apply-staged' in sys.argv:
   import hashlib,time,re
   _,mode,path,digest,version=sys.argv
@@ -136,7 +150,7 @@ def main():
  if running():
   print('Cierra la consola anterior con Ctrl+C antes de instalar.')
   input('Cuando esté cerrada, presiona Enter: ')
- if '--update' not in sys.argv and (src/'python'/'python.exe').is_file():
+ if os.name=='nt' and '--update' not in sys.argv and (src/'python'/'python.exe').is_file():
   if running():raise RuntimeError('Cierra primero la aplicación abierta.')
   base=Path(os.environ['LOCALAPPDATA'])/'SBS_SB'
   runtime=base/'python'

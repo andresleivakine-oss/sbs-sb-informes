@@ -9,7 +9,7 @@ from vald_common import authenticate,NoRedirect
 import tempfile,base64
 import win_secrets
 from test_labels import friendly,decorate,spanish_label
-from install_local import VERSION,check_online_update,stage_online_update
+from install_local import VERSION,check_online_update,stage_online_update,app_base
 ROOT=Path(__file__).resolve().parent
 PORT=8877
 SESSION=secrets.token_urlsafe(32)
@@ -86,8 +86,7 @@ def birthdate(value):
  except (ValueError,OverflowError,OSError):return ''
 
 def identity_path():
- root=Path(os.environ.get('LOCALAPPDATA') or Path.home()/'.local'/'share')
- return root/'SBS_SB'/'identidad.json'
+ return app_base()/'identidad.json'
 def read_identity():
  try:
   p=identity_path()
@@ -525,7 +524,7 @@ class Handler(SimpleHTTPRequestHandler):
 
 def main():
  global CID,SECRET,KINVENT,TENANT,TOKEN,SAVED,STORAGE_WARNING
- print('SBS / SB · Aplicación local 0.5.39 · Solo lectura.\nConfigura ambos proveedores desde Conexiones en la pantalla.\n')
+ print('SBS / SB · Aplicación local 0.5.40 · Solo lectura.\nConfigura ambos proveedores desde Conexiones en la pantalla.\n')
  if win_secrets.supported():
   try:SAVED=win_secrets.load()
   except Exception:STORAGE_WARNING='No se pudo recuperar la configuración protegida. Vuelve a configurar las conexiones.'

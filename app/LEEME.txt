@@ -1,5 +1,5 @@
-SBS / SB · Aplicación local 0.5.39 · Windows
-La versión 0.5.39 permite abrir un HTML editable desde la aplicación y recuperar sus datos con el diseño actual.
+SBS / SB · Aplicación local 0.5.40 · Windows
+La versión 0.5.40 permite abrir un HTML editable desde la aplicación y recuperar sus datos con el diseño actual.
 Si ya tienes la app instalada, pulsa Actualizar aplicación en la pantalla.
 Al actualizar, la configuración anterior de los centros se conserva en este PC.
 
@@ -131,3 +131,5 @@ GitHub solo recibe peticiones de descarga (no claves ni informes).
 Las versiones se distribuyen mediante updates/latest.json y paquetes ZIP dentro del repositorio. No requiere cuenta GitHub en cada computador.
 La instalación/reapertura automática en Windows todavía debe comprobarse en
 un computador Windows; aquí se probaron validaciones y flujo con simulaciones.
+
+macOS: instala con INSTALAR_MAC.command del paquete Mac. Conexiones en Llavero, actualización compartida desde la app.

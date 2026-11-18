@@ -1,0 +1,11 @@
+SBS / SB · macOS · 0.5.40 (primera edición para validación)
+
+1. Instala Python 3.10 o posterior para macOS desde https://www.python.org/downloads/macos/ (una sola vez). Abre Install Certificates.command dentro de la carpeta Python en Aplicaciones.
+2. Descomprime el ZIP completo; no muevas el instalador fuera de la carpeta.
+3. Abre INSTALAR_MAC.command. Si macOS bloquea su apertura, revisa Ajustes del Sistema > Privacidad y seguridad > Abrir igualmente para este archivo de origen conocido. No desactives la seguridad del Mac.
+4. Se crea Informes SBS SB.command en el escritorio. Mantén la ventana Terminal abierta mientras usas la app. Para cerrar: Ctrl+C.
+5. Selecciona SB y configura Kinvent en Conexiones. Recordar guarda las claves en el Llavero de este usuario; macOS puede pedir autorización. Si no lo autorizas, usa solo esta sesión.
+6. Las próximas versiones se instalan desde Actualizar aplicación. Se conservan las conexiones y los datos del centro. Guarda cada informe con Guardar HTML editable antes de actualizar.
+
+No incluye Python ni firma/notarización Apple. Preparado para Intel y Apple Silicon mediante Python compatible con tu equipo; instalación y Llavero pendientes de validación en un Mac real.
+Los informes guardados conservan sus datos; importar otra vez un test requiere consultar al proveedor. No se modifican registros VALD/Kinvent.
